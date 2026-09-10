@@ -1,6 +1,16 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 
+// This site always opens on the booking home screen.  Without this, browsers can
+// restore the previous scroll position (for example, the live-tracking section)
+// after a refresh.
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+function openHomeFirst() {
+  window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+}
+openHomeFirst();
+window.addEventListener('pageshow', openHomeFirst);
+
 const state = {
   type: 'normal',
   stations: [],
@@ -620,6 +630,7 @@ function bindEvents() {
   setupMap();
   bindEvents();
   await Promise.all([searchTrains(), loadBookings()]);
+  openHomeFirst();
 })();
 
 function animateTrainMarker(target, live) {
