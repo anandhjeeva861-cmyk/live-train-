@@ -48,6 +48,13 @@ function setDefaultDate() {
 }
 
 function scrollToId(id) {
+  const section = id === 'weather' ? 'tracking' : id === 'dashboard' ? 'home' : id;
+  $$('.desktop-nav [data-scroll], .mobile-nav [data-scroll]').forEach(button => {
+    const active = button.dataset.scroll === section;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 

@@ -25,7 +25,7 @@
         <span><b>Live Train</b></span>
       </a>
       <nav class="desktop-nav" aria-label="Primary navigation">
-        <button data-scroll="home" class="active">Home</button>
+        <button data-scroll="home" class="active" aria-current="page">Home</button>
         <button data-scroll="results">Book Train</button>
         <button data-scroll="tracking">Live Tracking</button>
         <button data-scroll="tourism">Tourism</button>
@@ -38,8 +38,54 @@
     </header>
 
     <main>
+      <section class="hero" id="home">
+        <div class="hero-shade"></div>
+        <div class="hero-copy">
+          <span class="kicker">INDIA ON TRACK</span>
+          <h1>Trains Take You Places</h1>
+          <p>Book regular or tourism trains and track the journey live<br class="desktop-break"> with speed, location, ETA, station progress, weather and more.</p>
+        </div>
+
+        <section class="booking-card" aria-labelledby="booking-title">
+          <div class="booking-tabs" role="tablist" aria-label="Train type">
+            <button class="booking-tab active" data-type="normal" role="tab" aria-selected="true">Normal Train</button>
+            <button class="booking-tab" data-type="tourism" role="tab" aria-selected="false">Tourism Train</button>
+          </div>
+          <h2 id="booking-title" class="sr-only">Search trains</h2>
+          <div class="route-row">
+            <label class="field"><span>From</span><select id="fromStation" aria-label="From station"></select></label>
+            <button class="swap-button" id="swapBtn" aria-label="Swap stations">⇄</button>
+            <label class="field"><span>To</span><select id="toStation" aria-label="To station"></select></label>
+          </div>
+          <div class="booking-options">
+            <label class="field"><span>Journey date</span><input type="date" id="journeyDate" /></label>
+            <label class="field"><span>Class</span><select id="travelClass"><option value="">Any class</option><option>SL</option><option>3A</option><option>2A</option><option>2S</option><option>CC</option><option>EC</option><option>EV</option><option>PC</option></select></label>
+            <label class="field"><span>Passengers</span><select id="passengers"><option value="1">1 Passenger</option><option value="2">2 Passengers</option><option value="3">3 Passengers</option><option value="4">4 Passengers</option><option value="5">5 Passengers</option><option value="6">6 Passengers</option></select></label>
+          </div>
+          <div class="booking-footer">
+            <label class="radio-inline"><input type="radio" name="modeMirror" value="normal" checked> Normal</label>
+            <label class="radio-inline"><input type="radio" name="modeMirror" value="tourism"> Tourism</label>
+            <button class="primary-button" id="searchBtn">Search Trains</button>
+          </div>
+          <p class="form-error" id="searchError" role="alert"></p>
+        </section>
+        <aside class="hero-live" aria-label="Current train status">
+          <div class="hero-live-heading"><b><span data-icon="train"></span> <span id="heroTrain">Your journey, in real time</span></b><span class="on-time" id="heroStatus">Connecting</span></div>
+          <div class="hero-live-values"><strong><span id="heroSpeed">—</span> <small>km/h</small></strong><div><small>Next Stop</small><b id="heroNext">Loading route…</b><span id="heroEta">Live journey updates</span></div></div>
+          <div class="hero-route" id="heroRoute"></div><small class="simulation-label">Simulated live tracking</small>
+        </aside>
+      </section>
+
+      <section class="feature-strip" aria-label="Key features">
+<button data-scroll="home"><span data-icon="ticket"></span><div><b>Book Tickets</b><small>Easy & Secure</small></div></button><button data-scroll="tracking"><span data-icon="pin"></span><div><b>Live Train Tracking</b><small>Real-time Location</small></div></button><button data-scroll="tourism"><span data-icon="home"></span><div><b>Tourist Spots</b><small>Explore Near Stations</small></div></button><button data-scroll="weather"><span data-icon="weather"></span><div><b>Weather Forecast</b><small>Plan Your Journey</small></div></button><button data-scroll="results"><span data-icon="train"></span><div><b>Tourism Trains</b><small>Special Experiences</small></div></button>      </section>
+
+      <section class="dashboard" id="dashboard" aria-label="Journey overview">
+        <article class="dashboard-panel mini-tracking"><div class="panel-heading"><h2>Live Train Tracking</h2><button data-scroll="tracking" class="on-time">● Live</button></div><div id="overviewMap" aria-label="Train route overview"></div><button class="map-open" data-scroll="tracking">Open live tracking ↗</button></article>
+        <article class="dashboard-panel journey-panel"><div class="panel-heading"><h2>Upcoming Journeys</h2><button data-scroll="bookings">View All</button></div><div id="upcomingJourneys"></div></article>
+        <article class="dashboard-panel destination-panel"><div class="panel-heading"><h2 id="destinationTitle">Top Tourist Spots Near Bengaluru</h2><button data-scroll="tourism">View All</button></div><div id="destinationPreview"></div></article>
+      </section>
       <section class="tracking-section" id="tracking">
-        <div class="tracking-intro"><div><span class="eyebrow">YOUR JOURNEY, IN MOTION</span><h1>Track your train. Every stop.</h1><p>Search 1,209 demo trains across India. Follow movement, station stops and arrival times.</p></div><span class="demo-disclosure">SIMULATION &middot; Illustrative routes, not live GPS</span></div>
+        <div class="tracking-intro"><div><span class="eyebrow">YOUR JOURNEY, IN MOTION</span><h2>Track your train. Every stop.</h2><p>Search 1,209 demo trains across India. Follow movement, station stops and arrival times.</p></div><span class="demo-disclosure">SIMULATION &middot; Illustrative routes, not live GPS</span></div>
         <div class="fleet-searchbar"><label for="fleetQuery">Find a train</label><input id="fleetQuery" type="search" placeholder="Train number, name or city - try 70000" autocomplete="off"><select id="fleetType" aria-label="Train type"><option value="all">All trains</option><option value="normal">Normal</option><option value="tourism">Tourism</option></select><button id="fleetToggle" class="secondary-button" aria-expanded="false">Browse trains</button></div>
         <div id="fleetDirectory" hidden><div class="fleet-meta"><span id="fleetCount" role="status">Loading trains...</span><div><button id="fleetPrev" aria-label="Previous trains">&larr;</button><button id="fleetNext" aria-label="Next trains">&rarr;</button></div></div><div id="fleetResults" class="fleet-results"></div></div>
         <div class="tracking-titlebar">
@@ -99,52 +145,6 @@
           </aside>
         </div>
       </section>
-      <section class="hero" id="home">
-        <div class="hero-shade"></div>
-        <div class="hero-copy">
-          <span class="kicker">INDIA ON TRACK</span>
-          <h1>Trains Take You Places</h1>
-          <p>Book regular or tourism trains and track the journey live<br class="desktop-break"> with speed, location, ETA, station progress, weather and more.</p>
-        </div>
-
-        <section class="booking-card" aria-labelledby="booking-title">
-          <div class="booking-tabs" role="tablist" aria-label="Train type">
-            <button class="booking-tab active" data-type="normal" role="tab" aria-selected="true">Normal Train</button>
-            <button class="booking-tab" data-type="tourism" role="tab" aria-selected="false">Tourism Train</button>
-          </div>
-          <h2 id="booking-title" class="sr-only">Search trains</h2>
-          <div class="route-row">
-            <label class="field"><span>From</span><select id="fromStation" aria-label="From station"></select></label>
-            <button class="swap-button" id="swapBtn" aria-label="Swap stations">⇄</button>
-            <label class="field"><span>To</span><select id="toStation" aria-label="To station"></select></label>
-          </div>
-          <div class="booking-options">
-            <label class="field"><span>Journey date</span><input type="date" id="journeyDate" /></label>
-            <label class="field"><span>Class</span><select id="travelClass"><option value="">Any class</option><option>SL</option><option>3A</option><option>2A</option><option>2S</option><option>CC</option><option>EC</option><option>EV</option><option>PC</option></select></label>
-            <label class="field"><span>Passengers</span><select id="passengers"><option value="1">1 Passenger</option><option value="2">2 Passengers</option><option value="3">3 Passengers</option><option value="4">4 Passengers</option><option value="5">5 Passengers</option><option value="6">6 Passengers</option></select></label>
-          </div>
-          <div class="booking-footer">
-            <label class="radio-inline"><input type="radio" name="modeMirror" value="normal" checked> Normal</label>
-            <label class="radio-inline"><input type="radio" name="modeMirror" value="tourism"> Tourism</label>
-            <button class="primary-button" id="searchBtn">Search Trains</button>
-          </div>
-          <p class="form-error" id="searchError" role="alert"></p>
-        </section>
-        <aside class="hero-live" aria-label="Current train status">
-          <div class="hero-live-heading"><b><span data-icon="train"></span> <span id="heroTrain">Your journey, in real time</span></b><span class="on-time" id="heroStatus">Connecting</span></div>
-          <div class="hero-live-values"><strong><span id="heroSpeed">—</span> <small>km/h</small></strong><div><small>Next Stop</small><b id="heroNext">Loading route…</b><span id="heroEta">Live journey updates</span></div></div>
-          <div class="hero-route" id="heroRoute"></div><small class="simulation-label">Simulated live tracking</small>
-        </aside>
-      </section>
-
-      <section class="feature-strip" aria-label="Key features">
-<button data-scroll="home"><span data-icon="ticket"></span><div><b>Book Tickets</b><small>Easy & Secure</small></div></button><button data-scroll="tracking"><span data-icon="pin"></span><div><b>Live Train Tracking</b><small>Real-time Location</small></div></button><button data-scroll="tourism"><span data-icon="home"></span><div><b>Tourist Spots</b><small>Explore Near Stations</small></div></button><button data-scroll="weather"><span data-icon="weather"></span><div><b>Weather Forecast</b><small>Plan Your Journey</small></div></button><button data-scroll="results"><span data-icon="train"></span><div><b>Tourism Trains</b><small>Special Experiences</small></div></button>      </section>
-
-      <section class="dashboard" aria-label="Journey overview">
-        <article class="dashboard-panel mini-tracking"><div class="panel-heading"><h2>Live Train Tracking</h2><button data-scroll="tracking" class="on-time">● Live</button></div><div id="overviewMap" aria-label="Train route overview"></div><button class="map-open" data-scroll="tracking">Open live tracking ↗</button></article>
-        <article class="dashboard-panel journey-panel"><div class="panel-heading"><h2>Upcoming Journeys</h2><button data-scroll="bookings">View All</button></div><div id="upcomingJourneys"></div></article>
-        <article class="dashboard-panel destination-panel"><div class="panel-heading"><h2 id="destinationTitle">Top Tourist Spots Near Bengaluru</h2><button data-scroll="tourism">View All</button></div><div id="destinationPreview"></div></article>
-      </section>
       <section class="section results-section" id="results">
         <div class="section-heading">
           <div><span class="eyebrow">TRAIN DISCOVERY</span><h2>Train search results</h2><p id="searchSummary">Choose From, To and train type to begin.</p></div>
@@ -188,7 +188,7 @@
     </footer>
 
     <nav class="mobile-nav" aria-label="Mobile navigation">
-<button data-scroll="home"><span data-icon="home"></span><small>Home</small></button><button data-scroll="results"><span data-icon="search"></span><small>Search</small></button><button data-scroll="tracking"><span data-icon="train"></span><small>Tracking</small></button><button data-scroll="bookings"><span data-icon="ticket"></span><small>Bookings</small></button><button id="mobileProfile"><span data-icon="user"></span><small>Profile</small></button>    </nav>
+<button data-scroll="home" class="active" aria-current="page"><span data-icon="home"></span><small>Home</small></button><button data-scroll="results"><span data-icon="search"></span><small>Search</small></button><button data-scroll="tracking"><span data-icon="train"></span><small>Tracking</small></button><button data-scroll="bookings"><span data-icon="ticket"></span><small>Bookings</small></button><button id="mobileProfile"><span data-icon="user"></span><small>Profile</small></button>    </nav>
   </div>
 
   <div class="modal-backdrop" id="bookingModal" hidden>
