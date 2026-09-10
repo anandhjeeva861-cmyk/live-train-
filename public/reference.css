@@ -11,5 +11,7 @@ body{background:#f2f6fb}.topbar{height:70px;background:linear-gradient(110deg,#0
 .site-footer a{font-size:10px;color:#d5e6ff;text-decoration:none}.site-footer a:hover{text-decoration:underline}
 .hosting-note{margin:0;padding:8px 16px;background:#e9f3ff;color:#36587f;text-align:center;font-size:11px;line-height:1.5}
 #home,#dashboard{scroll-margin-top:80px}
+/* Keep the booking home section as the first desktop view. */
+@media(min-width:761px){main{display:block}main>#home{display:block;position:relative;order:initial}}
 @media(min-width:761px) and (max-width:1000px){.hero-live{display:none}}
 @media(max-width:760px){.site-footer{padding-bottom:95px}.site-footer a{scroll-margin-bottom:160px}}

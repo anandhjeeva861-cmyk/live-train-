@@ -6,10 +6,21 @@ const $$ = selector => [...document.querySelectorAll(selector)];
 // after a refresh.
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 function openHomeFirst() {
-  window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  // Use the numeric form for consistent behavior in Chrome, Edge and previews.
+  window.scrollTo(0, 0);
+  $$('.desktop-nav [data-scroll], .mobile-nav [data-scroll]').forEach(button => {
+    const isHome = button.dataset.scroll === 'home';
+    button.classList.toggle('active', isHome);
+    if (isHome) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
 }
 openHomeFirst();
 window.addEventListener('pageshow', openHomeFirst);
+window.addEventListener('load', () => {
+  requestAnimationFrame(openHomeFirst);
+  setTimeout(openHomeFirst, 250);
+});
 
 const state = {
   type: 'normal',
