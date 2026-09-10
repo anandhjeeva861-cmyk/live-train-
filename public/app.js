@@ -1,11 +1,21 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 
+// A capture listener works with Helmet's script-src-attr policy. Inline image
+// onerror attributes are blocked by that policy, so use registered listeners.
+document.addEventListener('error', event => {
+  const image = event.target;
+  if (!(image instanceof HTMLImageElement) || !image.closest('.spot-card, .preview-spot') || image.dataset.fallbackApplied) return;
+  image.dataset.fallbackApplied = 'true';
+  image.src = './assets/lalbagh.jpg';
+}, true);
+
 // This site always opens on the booking home screen.  Without this, browsers can
 // restore the previous scroll position (for example, the live-tracking section)
 // after a refresh.
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 function openHomeFirst() {
+  if (!LiveTrainAPI.isStatic && ['/tracking', '/bookings', '/book'].includes(location.pathname)) return;
   // Use the numeric form for consistent behavior in Chrome, Edge and previews.
   window.scrollTo(0, 0);
   $$('.desktop-nav [data-scroll], .mobile-nav [data-scroll]').forEach(button => {
@@ -34,10 +44,14 @@ const state = {
   trainMarker: null,
   eventSource: null,
   pollingTimer: null,
+  pollingBusy: false,
   lastLive: null,
   lastWeatherAt: 0,
   spots: [],
-  alertsEnabled: false
+  alertsEnabled: false,
+  searchRequest: 0,
+  spotsRequest: 0,
+  bookingRequest: 0
 };
 
 const fallbackStations = [
@@ -54,10 +68,7 @@ function escapeHtml(value) {
 }
 
 function formatLocalDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 
 function setDefaultDate() {
@@ -69,6 +80,7 @@ function setDefaultDate() {
 }
 
 function scrollToId(id) {
+  if (!LiveTrainAPI.isStatic && ['dashboard', 'tracking', 'bookings', 'book'].includes(id) && !RailGoAuth.require()) return;
   const section = id === 'weather' ? 'tracking' : id === 'dashboard' ? 'home' : id;
   $$('.desktop-nav [data-scroll], .mobile-nav [data-scroll]').forEach(button => {
     const active = button.dataset.scroll === section;
@@ -154,6 +166,7 @@ function bindTrainButtons() {
 }
 
 async function searchTrains({ autoTrack = true } = {}) {
+  const request = ++state.searchRequest;
   const error = $('#searchError');
   error.textContent = '';
   const from = $('#fromStation').value;
@@ -164,12 +177,13 @@ async function searchTrains({ autoTrack = true } = {}) {
     return;
   }
 
-  const params = new URLSearchParams({ from, to, type: state.type });
+  const params = new URLSearchParams({ from, to, type: state.type, date: $('#journeyDate').value });
   if ($('#travelClass').value) params.set('class', $('#travelClass').value);
   $('#trainList').innerHTML = '<div class="empty-card">Searching trains…</div>';
 
   try {
     const result = await fetchJson(`/api/trains/search?${params}`);
+    if (request !== state.searchRequest) return;
     state.trains = result.trains || [];
     $('#searchSummary').textContent = `${getSearchRouteText()} · ${state.type === 'all' ? 'All train types' : state.type === 'tourism' ? 'Tourism trains' : 'Normal trains'} · ${result.count} result${result.count === 1 ? '' : 's'}`;
     $('#trainList').innerHTML = state.trains.length
@@ -177,8 +191,10 @@ async function searchTrains({ autoTrack = true } = {}) {
       : `<div class="empty-card"><b>No exact trains found.</b><br><small>Try the other train type, remove the class filter, or choose another route.</small></div>`;
     bindTrainButtons();
     await loadSpots();
-    if (autoTrack && state.trains[0]) selectTrackingTrain(state.trains[0]);
+    if (request !== state.searchRequest) return;
+    if (autoTrack && state.trains[0] && (LiveTrainAPI.isStatic || RailGoAuth.user)) selectTrackingTrain(state.trains[0]);
   } catch (err) {
+    if (request !== state.searchRequest) return;
     state.trains = [];
     $('#trainList').innerHTML = `<div class="empty-card">${escapeHtml(err.message)}</div>`;
     error.textContent = err.message;
@@ -199,7 +215,9 @@ function seatGridHtml(train) {
   }).join('');
 }
 
-function openBooking(id) {
+async function openBooking(id) {
+  if (!RailGoAuth.require()) return;
+  const bookingRequest = ++state.bookingRequest;
   const train = state.trains.find(t => t.id === id) || (state.selectedTrain?.id === id ? state.selectedTrain : null);
   if (!train) return;
   state.selectedSeat = null;
@@ -216,7 +234,8 @@ function openBooking(id) {
       <div><small>Type</small><b>${train.type === 'tourism' ? 'Tourism' : 'Normal'}</b></div>
     </div>
     <label class="field"><span>Travel class</span><select id="modalTravelClass">${classOptions}</select></label>
-    <h3 class="seat-title">Choose a seat</h3>
+    ${LiveTrainAPI.isStatic ? '' : `<div id="passengerForms">${Array.from({ length: Number($('#passengers').value) }, (_, i) => `<fieldset class="passenger-fields"><legend>Passenger ${i + 1}</legend><label class="field"><span>Name</span><input data-passenger-name maxlength="80" placeholder="Full name" required></label><label class="field"><span>Age</span><input data-passenger-age type="number" min="1" max="120" required></label><label class="field"><span>Gender</span><select data-passenger-gender><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></label></fieldset>`).join('')}</div>`}
+    <h3 class="seat-title">Choose the first passenger's seat</h3>
     <div class="seat-grid">${seatGridHtml(train)}</div>
     <div class="seat-legend"><span>Available</span><span>Selected</span><span>Booked</span></div>
     <div class="checkout-total"><span>Demo total for ${escapeHtml($('#passengers').value)} passenger(s)</span><b id="checkoutTotal">₹${train.fare[initialClass] * Number($('#passengers').value)}</b></div>
@@ -234,6 +253,26 @@ function openBooking(id) {
     $('#checkoutTotal').textContent = `₹${train.fare[event.target.value] * Number($('#passengers').value)}`;
   };
   $('#confirmBooking').onclick = () => confirmBooking(train);
+  if (!LiveTrainAPI.isStatic) {
+    const refreshSeats = async () => {
+      state.selectedSeat = null;
+      $('#confirmBooking').disabled = true;
+      const selectedClass = $('#modalTravelClass').value;
+      $('.seat-grid').innerHTML = '<p>Loading available seats…</p>';
+      try {
+        const classes = await fetchJson(`/api/trains/${encodeURIComponent(train.id)}/classes?date=${encodeURIComponent($('#journeyDate').value)}`);
+        if (bookingRequest !== state.bookingRequest || $('#bookingModal').hidden || $('#modalTravelClass')?.value !== selectedClass) return;
+        const c = classes.find(c => c.classCode === selectedClass);
+        $('.seat-grid').innerHTML = Array.from({ length: c.totalSeats }, (_, i) => `<button class="seat-button ${c.bookedSeats.includes(i + 1) ? 'booked' : ''}" ${c.bookedSeats.includes(i + 1) ? 'disabled' : ''} data-seat="S${i + 1}">${i + 1}</button>`).join('');
+        $$('.seat-button:not(.booked)').forEach(button => button.onclick = () => { $$('.seat-button').forEach(b => b.classList.remove('selected')); button.classList.add('selected'); state.selectedSeat = button.dataset.seat; $('#modalError').textContent = ''; });
+        $('#checkoutTotal').textContent = `₹${c.fare * Number($('#passengers').value)}`;
+        $('#confirmBooking').disabled = c.availableSeats < Number($('#passengers').value);
+        if ($('#confirmBooking').disabled) $('#modalError').textContent = 'Not enough seats in this class.';
+      } catch (error) { if ($('#modalError')) $('#modalError').textContent = error.message; }
+    };
+    $('#modalTravelClass').onchange = refreshSeats;
+    await refreshSeats();
+  }
 }
 
 async function confirmBooking(train) {
@@ -242,7 +281,9 @@ async function confirmBooking(train) {
     return;
   }
   const button = $('#confirmBooking');
+  const bookingRequest = state.bookingRequest;
   button.disabled = true;
+  $$('#modalBody input, #modalBody select, #modalBody .seat-button').forEach(input => { input.disabled = true; });
   button.textContent = 'Creating booking…';
   try {
     const booking = await fetchJson('/api/bookings', {
@@ -252,10 +293,11 @@ async function confirmBooking(train) {
         trainId: train.id,
         journeyDate: $('#journeyDate').value,
         travelClass: $('#modalTravelClass').value,
-        passengers: Number($('#passengers').value),
+        passengers: LiveTrainAPI.isStatic ? Number($('#passengers').value) : $$('.passenger-fields').map(row => ({ name: row.querySelector('[data-passenger-name]').value, age: Number(row.querySelector('[data-passenger-age]').value), gender: row.querySelector('[data-passenger-gender]').value })),
         seat: state.selectedSeat
       })
     });
+    if (bookingRequest !== state.bookingRequest) { await loadBookings(); return; }
     $('#modalBody').innerHTML = `
       <div class="checkout-summary">
         <div><small>Status</small><b style="color:#13a857">✓ ${escapeHtml(booking.status)}</b></div>
@@ -273,8 +315,10 @@ async function confirmBooking(train) {
     await loadBookings();
     showToast(`Booking confirmed · PNR ${booking.pnr}`);
   } catch (err) {
+    if (bookingRequest !== state.bookingRequest) return;
     $('#modalError').textContent = err.message;
     button.disabled = false;
+    $$('#modalBody input, #modalBody select, #modalBody .seat-button:not(.booked)').forEach(input => { input.disabled = false; });
     button.textContent = 'Confirm demo booking';
   }
 }
@@ -343,6 +387,7 @@ function closeLiveConnection() {
 }
 
 async function selectTrackingTrain(train) {
+  if (!RailGoAuth.require()) return;
   closeLiveConnection();
   state.selectedTrain = train;
   state.lastLive = null;
@@ -354,6 +399,13 @@ async function selectTrackingTrain(train) {
   renderStationTimeline(train);
   drawRoute(train);
   connectLiveStream(train);
+  const selectedId = train.id;
+  try {
+    const spots = await fetchJson(`/api/tourist-spots?city=${encodeURIComponent(train.to.city)}`);
+    if (state.selectedTrain?.id !== selectedId) return;
+    state.trackingSpots = spots;
+    addSpotMarkers({ spots });
+  } catch { /* Tracking continues without destination spots. */ }
 }
 
 function connectLiveStream(train) {
@@ -370,16 +422,19 @@ function connectLiveStream(train) {
   }
 
   if ('EventSource' in window) {
-    const source = new EventSource(LiveTrainAPI.apiUrl(`/api/trains/${encodeURIComponent(train.id)}/live-stream`));
+    const source = new EventSource(LiveTrainAPI.apiUrl(`/api/trains/${encodeURIComponent(train.id)}/live-stream`), { withCredentials: true });
     state.eventSource = source;
     source.addEventListener('live', event => {
       try { applyLiveState(JSON.parse(event.data)); } catch { /* ignore malformed demo event */ }
     });
     source.onopen = () => {
+      clearInterval(state.pollingTimer); state.pollingTimer = null;
       badge.textContent = '● Live stream';
       badge.className = 'connection-badge online';
     };
     source.onerror = () => {
+      if (state.eventSource !== source) return;
+      if (!state.pollingTimer) { updateLiveOnce(); state.pollingTimer = setInterval(updateLiveOnce, 3000); }
       badge.textContent = '● Reconnecting';
       badge.className = 'connection-badge offline';
     };
@@ -393,11 +448,13 @@ function connectLiveStream(train) {
 }
 
 async function updateLiveOnce() {
-  if (!state.selectedTrain) return;
+  if (!state.selectedTrain || state.pollingBusy) return;
+  state.pollingBusy = true;
   try {
     const live = await fetchJson(`/api/trains/${encodeURIComponent(state.selectedTrain.id)}/live`);
     applyLiveState(live);
   } catch { /* transient network error */ }
+  finally { state.pollingBusy = false; }
 }
 
 function formatArrival(iso) {
@@ -448,7 +505,7 @@ function applyLiveState(live) {
     state.travelledLayer.setLatLngs([...state.selectedTrain.route.slice(0, leg).map(p => [p.lat, p.lng]), [live.lat, live.lng]]);
   }
 
-  if (Date.now() - state.lastWeatherAt > 60_000) {
+  if (Date.now() - state.lastWeatherAt > 600_000) {
     state.lastWeatherAt = Date.now();
     loadWeather(live.lat, live.lng);
   }
@@ -465,8 +522,11 @@ function weatherDescriptor(code) {
 }
 
 async function loadWeather(lat, lng) {
+  const trainId = state.selectedTrain?.id;
   try {
     const weather = await fetchJson(`/api/weather?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`);
+    if (state.selectedTrain?.id !== trainId) return;
+    if (weather.fallback) throw new Error('Weather unavailable');
     const current = weather.current || {};
     const [icon, label] = weatherDescriptor(current.weather_code);
     $('#weatherIcon').textContent = icon;
@@ -477,29 +537,37 @@ async function loadWeather(lat, lng) {
     $('#rainValue').textContent = `${weather.hourly?.precipitation_probability?.[0] ?? 16}%`;
     $('#weatherPlace').textContent = state.lastLive?.currentSection || 'Current train location';
 
-    const temperatures = weather.hourly?.temperature_2m || [];
-    const codes = weather.hourly?.weather_code || [];
-    const rain = weather.hourly?.precipitation_probability || [];
+    const nextHour = Math.max(0, (weather.hourly?.time || []).findIndex(time => time > current.time));
+    const temperatures = (weather.hourly?.temperature_2m || []).slice(nextHour);
+    const codes = (weather.hourly?.weather_code || []).slice(nextHour);
+    const rain = (weather.hourly?.precipitation_probability || []).slice(nextHour);
+    $('#rainValue').textContent = rain[0] === undefined ? '—' : `${rain[0]}%`;
     $('#forecastRow').innerHTML = Array.from({ length: 5 }, (_, index) => {
       const [, labelText] = weatherDescriptor(codes[index] ?? current.weather_code);
       const [forecastIcon] = weatherDescriptor(codes[index] ?? current.weather_code);
       return `<div class="forecast-item"><b>+${index + 1}h</b><span title="${escapeHtml(labelText)}">${forecastIcon}</span><small>${Math.round(temperatures[index] ?? current.temperature_2m ?? 29)}° · ${rain[index] ?? 0}%</small></div>`;
     }).join('');
   } catch {
+    if (state.selectedTrain?.id !== trainId) return;
     $('#weatherLabel').textContent = 'Weather temporarily unavailable';
+    for (const id of ['tempValue', 'feelsValue', 'windValue', 'rainValue']) $(`#${id}`).textContent = '—';
+    $('#forecastRow').innerHTML = '';
   }
 }
 
 async function loadSpots() {
+  const request = ++state.spotsRequest;
   const selected = $('#toStation').selectedOptions[0];
   const city = selected?.dataset.city || '';
   try {
-    state.spots = await fetchJson(`/api/tourist-spots?city=${encodeURIComponent(city)}`);
+    const spots = await fetchJson(`/api/tourist-spots?city=${encodeURIComponent(city)}`);
+    if (request !== state.spotsRequest) return;
+    state.spots = spots;
     const localImages = { 3: './assets/lalbagh.jpg', 4: './assets/bangalore-palace.jpg', 6: './assets/nandi-hills.jpg' };
     state.spots = state.spots.map(spot => ({ ...spot, image: localImages[spot.id] || spot.image }));
     $('#spotGrid').innerHTML = state.spots.length ? state.spots.map(spot => `
       <article class="spot-card">
-        <img src="${escapeHtml(spot.image)}" alt="${escapeHtml(spot.name)}" loading="lazy" onerror="this.style.visibility='hidden'">
+        <img src="${escapeHtml(spot.image)}" alt="${escapeHtml(spot.name)}" loading="lazy">
         <div class="spot-body">
           <h3>${escapeHtml(spot.name)}</h3>
           <p>📍 ${escapeHtml(spot.city)} · ${escapeHtml(spot.distanceKm)} km from station</p>
@@ -508,16 +576,17 @@ async function loadSpots() {
       </article>`).join('') : '<div class="empty-card">No curated tourist spots are available for this destination yet.</div>';
     $$('[data-spot]').forEach(button => button.onclick = () => showSpotOnMap(Number(button.dataset.spot)));
   } catch {
+    if (request !== state.spotsRequest) return;
     state.spots = [];
     $('#spotGrid').innerHTML = '<div class="empty-card">Tourist spot data is unavailable.</div>';
   }
 }
 
-function addSpotMarkers({ fit = false, focusId = null } = {}) {
-  if (!state.map || !window.L || !state.spots.length) return;
+function addSpotMarkers({ fit = false, focusId = null, spots = state.spots } = {}) {
+  if (!state.map || !window.L) return;
   state.poiLayer.clearLayers();
   const bounds = [];
-  state.spots.forEach(spot => {
+  spots.forEach(spot => {
     const marker = L.marker([spot.lat, spot.lng], {
       icon: L.divIcon({ className: '', html: '<div class="poi-marker">★</div>', iconSize: [26, 26], iconAnchor: [13, 13] })
     }).bindTooltip(`${escapeHtml(spot.name)} · ${spot.distanceKm} km`, { className: 'route-tooltip' }).addTo(state.poiLayer);
@@ -560,6 +629,7 @@ async function quickTrack() {
 }
 
 async function loadBookings() {
+  if (!LiveTrainAPI.isStatic && !RailGoAuth.user) { $('#bookingList').innerHTML = '<div class="empty-card">Sign in to view your bookings.</div>'; return; }
   try {
     const bookings = await fetchJson('/api/bookings');
     $('#bookingList').innerHTML = bookings.length ? bookings.map(booking => `
@@ -570,8 +640,13 @@ async function loadBookings() {
           <p>PNR ${escapeHtml(booking.pnr)} · ${escapeHtml(booking.from.city)} → ${escapeHtml(booking.to.city)} · ${escapeHtml(booking.journeyDate)}</p>
           <div class="booking-meta"><span>${escapeHtml(booking.travelClass)}</span><span>${escapeHtml(booking.coach)} / ${escapeHtml(booking.seat)}</span><span>${escapeHtml(booking.passengers)} passenger(s)</span><span>₹${escapeHtml(booking.fare)}</span></div>
         </div>
-        <div class="booking-actions"><button class="track-button" data-booking-track="${escapeHtml(booking.trainId)}">Live Track</button></div>
+        <div class="booking-actions"><button class="track-button" data-booking-track="${escapeHtml(booking.trainId)}">Live Track</button>${!LiveTrainAPI.isStatic && booking.status === 'CONFIRMED' ? `<button class="secondary-button" data-cancel-pnr="${booking.pnr}">Cancel demo ticket</button>` : ''}</div>
       </article>`).join('') : '<div class="empty-card">No demo bookings yet. Book a train to generate a PNR.</div>';
+    $$('[data-cancel-pnr]').forEach(button => button.onclick = async () => {
+      button.disabled = true;
+      try { await fetchJson(`/api/bookings/${button.dataset.cancelPnr}/cancel`, { method: 'PATCH' }); await loadBookings(); showToast('Demo booking cancelled. Seats restored.'); }
+      catch (error) { showToast(error.message); button.disabled = false; }
+    });
     $$('[data-booking-track]').forEach(button => button.onclick = async () => {
       try {
         const train = await fetchJson(`/api/trains/${encodeURIComponent(button.dataset.bookingTrack)}`);
@@ -636,12 +711,15 @@ function bindEvents() {
 }
 
 (async function init() {
+  await RailGoAuth.ready;
   setDefaultDate();
   await loadStations();
   setupMap();
   bindEvents();
   await Promise.all([searchTrains(), loadBookings()]);
   openHomeFirst();
+  const section = ({ '/tracking': 'tracking', '/bookings': 'bookings', '/book': 'results' })[location.pathname];
+  if (section) setTimeout(() => scrollToId(section), 300);
 })();
 
 function animateTrainMarker(target, live) {

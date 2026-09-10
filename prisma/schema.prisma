@@ -1,0 +1,191 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id             String   @id @default(cuid())
+  mobileNumber   String   @unique
+  mobileVerified Boolean  @default(false)
+  email          String?  @unique
+  googleId       String?  @unique
+  name           String
+  avatar         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  bookings       Booking[]
+}
+
+model OtpVerification {
+  id           String   @id @default(cuid())
+  mobileNumber String   @unique
+  otpHash      String
+  expiresAt    DateTime
+  attempts     Int      @default(0)
+  verified     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  @@index([expiresAt])
+}
+
+model Session {
+  id        String   @id
+  data      String
+  expiresAt DateTime
+  @@index([expiresAt])
+}
+
+model Station {
+  id          String @id
+  code        String @unique
+  name        String
+  city        String
+  latitude    Float
+  longitude   Float
+  origins     Train[] @relation("Origin")
+  destinations Train[] @relation("Destination")
+  stops       TrainStop[]
+  spots       TouristSpot[]
+  nextStatuses LiveTrainStatus[] @relation("NextStation")
+  previousStatuses LiveTrainStatus[] @relation("PreviousStation")
+  @@index([city])
+}
+
+model Train {
+  id                   String @id
+  trainNumber          String @unique
+  name                 String
+  type                 String
+  originStationId      String
+  destinationStationId String
+  departureTime        String
+  arrivalTime          String
+  duration             String
+  rating               Float @default(4.5)
+  active               Boolean @default(true)
+  originStation        Station @relation("Origin", fields: [originStationId], references: [id])
+  destinationStation   Station @relation("Destination", fields: [destinationStationId], references: [id])
+  stops                TrainStop[]
+  classes              TrainClass[]
+  bookings             Booking[]
+  liveStatus           LiveTrainStatus?
+  @@index([originStationId, destinationStationId, type, active])
+}
+
+model TrainStop {
+  id            String @id @default(cuid())
+  trainId       String
+  stationId     String
+  stopOrder     Int
+  arrivalTime   String
+  departureTime String
+  platform      String
+  distanceKm    Float
+  train         Train @relation(fields: [trainId], references: [id], onDelete: Cascade)
+  station       Station @relation(fields: [stationId], references: [id])
+  @@unique([trainId, stopOrder])
+  @@unique([trainId, stationId])
+  @@index([stationId])
+}
+
+model TrainClass {
+  id             String @id @default(cuid())
+  trainId        String
+  classCode      String
+  className      String
+  fare           Int
+  totalSeats     Int
+  availableSeats Int
+  train          Train @relation(fields: [trainId], references: [id], onDelete: Cascade)
+  inventories    JourneyInventory[]
+  @@unique([trainId, classCode])
+}
+
+// Inventory belongs to a departure date. TrainClass is the capacity template.
+model JourneyInventory {
+  id             String @id @default(cuid())
+  trainClassId   String
+  journeyDate    String
+  availableSeats Int
+  trainClass     TrainClass @relation(fields: [trainClassId], references: [id], onDelete: Cascade)
+  reservations   SeatReservation[]
+  @@unique([trainClassId, journeyDate])
+}
+
+model Booking {
+  id            String @id @default(cuid())
+  pnr           String @unique
+  userId        String
+  trainId       String
+  journeyDate   String
+  classCode     String
+  totalFare     Int
+  bookingStatus String @default("CONFIRMED")
+  createdAt     DateTime @default(now())
+  user          User @relation(fields: [userId], references: [id])
+  train         Train @relation(fields: [trainId], references: [id])
+  passengers    Passenger[]
+  reservations  SeatReservation[]
+  @@index([userId, createdAt])
+  @@index([trainId, journeyDate, classCode, bookingStatus])
+}
+
+model Passenger {
+  id         String @id @default(cuid())
+  bookingId  String
+  name       String
+  age        Int
+  gender     String
+  coach      String
+  seatNumber Int
+  booking    Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  @@index([bookingId])
+}
+
+model SeatReservation {
+  id          String @id @default(cuid())
+  inventoryId String
+  bookingId   String
+  seatNumber  Int
+  inventory   JourneyInventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  booking     Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  @@unique([inventoryId, seatNumber])
+  @@index([bookingId])
+}
+
+model LiveTrainStatus {
+  id                 String @id @default(cuid())
+  trainId            String @unique
+  latitude           Float
+  longitude          Float
+  currentSpeed       Float
+  averageSpeed       Float
+  nextStationId      String?
+  previousStationId  String?
+  distanceRemaining  Float
+  progressPercent    Float
+  delayMinutes       Int
+  platform           String
+  status             String
+  updatedAt          DateTime @updatedAt
+  train              Train @relation(fields: [trainId], references: [id], onDelete: Cascade)
+  nextStation        Station? @relation("NextStation", fields: [nextStationId], references: [id])
+  previousStation    Station? @relation("PreviousStation", fields: [previousStationId], references: [id])
+}
+
+model TouristSpot {
+  id          Int @id
+  stationId   String
+  name        String
+  description String
+  category    String
+  imageUrl    String
+  latitude    Float
+  longitude   Float
+  distanceKm  Float
+  rating      Float
+  station     Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  @@index([stationId, category])
+}

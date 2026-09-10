@@ -12,7 +12,7 @@ async function scripts(directory) {
   }
   return files;
 }
-const files = ['server.js', 'assistant.js', ...await scripts('public'), ...await scripts('data'), ...await scripts('scripts')];
+const files = ['server.js', 'assistant.js', ...await scripts('public'), ...await scripts('data'), ...await scripts('scripts'), ...await scripts('backend'), ...await scripts('prisma'), ...await scripts('tests')];
 for (const file of files) {
   const result = spawnSync(process.execPath, ['--check', fileURLToPath(new URL(file, root))], { stdio: 'inherit', windowsHide: true });
   if (result.status !== 0) process.exit(result.status || 1);

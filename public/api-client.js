@@ -21,10 +21,13 @@
       if (options.signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
       return result;
     }
-    const response = await fetch(apiUrl(path), options);
+    const response = await fetch(apiUrl(path), { credentials: 'include', ...options, signal: options.signal || AbortSignal.timeout(20000) });
     let payload;
     try { payload = await response.json(); } catch { throw new Error('The backend returned a web page instead of data. Check the backend URL.'); }
-    if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
+    if (!response.ok) {
+      if (response.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event('railgo-auth-required'));
+      throw Object.assign(new Error(payload.error || `Request failed (${response.status})`), { status: response.status });
+    }
     return payload;
   }
   window.LiveTrainAPI = Object.freeze({ request, apiUrl, isStatic });

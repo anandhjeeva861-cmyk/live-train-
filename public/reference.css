@@ -12,6 +12,7 @@ body{background:#f2f6fb}.topbar{height:70px;background:linear-gradient(110deg,#0
 .hosting-note{margin:0;padding:8px 16px;background:#e9f3ff;color:#36587f;text-align:center;font-size:11px;line-height:1.5}
 #home,#dashboard{scroll-margin-top:80px}
 /* Keep the booking home section as the first desktop view. */
+.passenger-fields{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr);gap:10px;border:1px solid #dbe5f0;border-radius:10px;margin:12px 0;padding:12px}.passenger-fields input,.passenger-fields select{min-width:0;width:100%}.seat-grid{max-height:240px;overflow-y:auto}.auth-modal{max-height:90dvh;overflow-y:auto}.user-chip b{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:480px){.passenger-fields{grid-template-columns:1fr 1fr}.passenger-fields .field:first-of-type{grid-column:1/-1}}
 @media(min-width:761px){main{display:block}main>#home{display:block;position:relative;order:initial}}
 @media(min-width:761px) and (max-width:1000px){.hero-live{display:none}}
 @media(max-width:760px){.site-footer{padding-bottom:95px}.site-footer a{scroll-margin-bottom:160px}}

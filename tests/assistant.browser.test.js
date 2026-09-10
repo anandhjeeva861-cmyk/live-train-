@@ -4,10 +4,11 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
+import { databaseEnvironment, browserLogin } from './helpers.js';
 
 test('voice assistant: app actions, speech lifecycle, errors and responsive UI', { timeout: 90000 }, async () => {
   const port = '4187', base = `http://127.0.0.1:${port}`;
-  const child = spawn(process.execPath, ['server.js'], { env: { ...process.env, PORT: port, OPENAI_API_KEY: '' }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, ['server.js'], { env: { ...databaseEnvironment('assistant-browser'), PORT: port }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   let browser;
   try {
     await new Promise((resolve, reject) => {
@@ -18,6 +19,7 @@ test('voice assistant: app actions, speech lifecycle, errors and responsive UI',
     const executablePath = process.env.BROWSER_PATH || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
     browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
     const page = await browser.newPage({ viewport: { width: 1440, height: 980 } });
+    await browserLogin(page.request, base);
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.addInitScript(() => {
       window.__speechSessions = [];
@@ -85,6 +87,7 @@ test('voice assistant: app actions, speech lifecycle, errors and responsive UI',
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: 'test-results/assistant-mobile.png' });
     const unsupported = await browser.newPage();
+    await browserLogin(unsupported.request, base);
     await unsupported.addInitScript(() => { window.SpeechRecognition = undefined; window.webkitSpeechRecognition = undefined; });
     await unsupported.goto(base, { waitUntil: 'domcontentloaded' }); await unsupported.locator('#assistantLaunch').click();
     assert.equal(await unsupported.locator('#assistantMic').isDisabled(), true);

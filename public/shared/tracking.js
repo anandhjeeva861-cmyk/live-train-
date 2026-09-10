@@ -46,7 +46,7 @@ export function getSchedule(train) {
   const stops = [{ arrival: 0, departure: 90, distance: 0 }];
   seconds = 90;
   metrics.segmentKm.forEach((km, index) => {
-    seconds += km / speed * 3600;
+    seconds += km / speed * 3600 + 30;
     distance += km;
     const arrival = seconds;
     seconds += index === metrics.segmentKm.length - 1 ? 120 : 60 + (seed + index) % 120;
@@ -67,8 +67,17 @@ export function getLiveState(train, now = Date.now()) {
   const atDestination = elapsed >= m.stops.at(-1).arrival;
   const dwelling = atDestination || elapsed < m.stops[leg].departure;
   const fromPoint = train.route[leg], toPoint = train.route[leg + 1];
-  const legProgress = atDestination ? 1 : Math.max(0, Math.min(1,
-    (elapsed - m.stops[leg].departure) / (m.stops[leg + 1].arrival - m.stops[leg].departure)));
+  const duration = m.stops[leg + 1].arrival - m.stops[leg].departure;
+  const ramp = Math.min(30, duration / 4);
+  const legSeconds = Math.max(0, Math.min(duration, elapsed - m.stops[leg].departure));
+  // Integrate a trapezoidal speed profile: accelerate, cruise, then brake.
+  // The integral reaches exactly the segment length at the scheduled arrival.
+  const area = legSeconds < ramp ? legSeconds ** 2 / (2 * ramp)
+    : legSeconds > duration - ramp ? duration - ramp - (duration - legSeconds) ** 2 / (2 * ramp)
+    : legSeconds - ramp / 2;
+  const legProgress = atDestination ? 1 : area / (duration - ramp);
+  const speedFactor = Math.min(1, legSeconds / ramp, (duration - legSeconds) / ramp);
+  const speedKmph = dwelling ? 0 : m.segmentKm[leg] / (duration - ramp) * 3600 * speedFactor;
   const position = interpolate(fromPoint, toPoint, legProgress);
   const travelled = m.stops[leg].distance + m.segmentKm[leg] * legProgress;
   const delayMinutes = m.seed % 7 === 0 ? 5 + m.seed % 16 : 0;
@@ -77,7 +86,7 @@ export function getLiveState(train, now = Date.now()) {
   return {
     trainId: train.id, trainNo: train.number, trainName: train.name,
     lat: +position.lat.toFixed(6), lng: +position.lng.toFixed(6),
-    bearing: +bearingDeg(fromPoint, toPoint).toFixed(1), speedKmph: dwelling ? 0 : m.speed,
+    bearing: +bearingDeg(fromPoint, toPoint).toFixed(1), speedKmph: +speedKmph.toFixed(1),
     progress: +(travelled / m.totalKm).toFixed(6), segmentProgress: +legProgress.toFixed(6),
     currentSection: `${fromPoint.code} \u2192 ${toPoint.code}`, previousStation: fromPoint.name,
     nextStation: toPoint.name, nextStationCode: toPoint.code,

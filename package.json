@@ -4,24 +4,40 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch server.js",
+    "dev": "node scripts/dev.js",
     "start": "node server.js",
     "build:pages": "node scripts/build-pages.js",
     "check": "node scripts/check.js",
-    "test": "node --test tests/assistant.test.js tests/tracking.test.js",
+    "test": "node --test tests/assistant.test.js tests/tracking.test.js tests/backend.test.js tests/production.test.js",
     "test:browser": "node --test tests/assistant.browser.test.js",
     "test:pages": "node scripts/build-pages.js --check && node --test tests/pages.browser.test.js",
-    "export:mock": "node scripts/export-mock-data.js"
+    "export:mock": "node scripts/export-mock-data.js",
+    "security:secrets": "node scripts/check-secrets.js",
+    "test:fullstack": "node --test tests/fullstack.browser.test.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.12"
   },
   "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.11.1",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.7.0",
+    "express-session": "^1.19.0",
+    "google-auth-library": "^11.0.2",
+    "helmet": "^8.3.0",
+    "zod": "^4.6.1"
   },
   "devDependencies": {
-    "playwright": "^1.63.0"
+    "playwright": "^1.63.0",
+    "prisma": "^7.10.0"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2",
+    "mysql2": "^3.24.4"
   }
 }

@@ -97,8 +97,10 @@ export function validateIntent(value) {
   return [null, 'normal', 'tourism', 'all'].includes(value.type);
 }
 
-export function createAssistant({ getLiveState, getWeatherData, resolveIntent = null }) {
+const defaultCatalog = { trains, touristSpots };
+export function createAssistant({ getLiveState, getWeatherData, resolveIntent = null, getCatalog = null }) {
   return async function answer({ message, language = 'en-IN', context = {}, history = [] }) {
+    const { trains, touristSpots } = getCatalog ? await getCatalog() : defaultCatalog;
     const ta = language === 'ta-IN';
     const say = (en, tamil) => ta ? tamil : en;
     let plan = parseCommand(message), mode = 'commands', notice = null;
@@ -128,7 +130,7 @@ export function createAssistant({ getLiveState, getWeatherData, resolveIntent = 
       if (plan.trainNumber && /^\d{10}$/.test(plan.trainNumber)) return result(say('Use the tracking lookup to check this demo PNR.', 'இந்த டெமோ PNR-ஐ கண்காணிப்பு தேடலில் சரிபார்க்கலாம்.'), { kind: 'pnr', pnr: plan.trainNumber });
       const train = plan.trainNumber ? trains.find(t => t.number.toUpperCase() === plan.trainNumber.toUpperCase()) : trains.find(t => t.id === context.trainId);
       if (!train) return result(say('Tell me a supported train number, for example “Track 12639”.', 'ரயில் எண்ணைக் கூறுங்கள். உதாரணம்: “12639 ரயில் எங்கே?”'));
-      const live = getLiveState(train);
+      const live = await getLiveState(train);
       return result(say(`${train.name} is travelling at ${live.speedKmph} kilometres per hour. Next station: ${live.nextStation}. Estimated destination arrival in ${live.etaMinutes} minutes. This is simulated tracking.`, `${train.name} மணிக்கு ${live.speedKmph} கிலோமீட்டர் வேகத்தில் செல்கிறது. அடுத்த நிலையம் ${live.nextStation}. சேரும் நிலையத்தை அடைய சுமார் ${live.etaMinutes} நிமிடங்கள். இது டெமோ கண்காணிப்பு.`), { kind: 'track', trainId: train.id });
     }
     if (plan.intent === 'weather') {
@@ -150,4 +152,3 @@ export function createAssistant({ getLiveState, getWeatherData, resolveIntent = 
     return result(say('I can search trains, track a train, check destination weather and find tourist spots. Try “Chennai to Bangalore tomorrow”, “Track 12639”, or “Show my bookings”. Basic command mode is active; free-form AI chat requires the server AI connection.', 'ரயில் தேடல், கண்காணிப்பு, வானிலை, சுற்றுலா இடங்கள் பற்றி உதவுவேன். “சென்னை முதல் பெங்களூரு நாளை ரயில்”, “12639 ரயில் எங்கே”, “என் டிக்கெட்டுகள்” என்று கேளுங்கள். அடிப்படை கட்டளை முறை இயங்குகிறது. பொதுவான AI உரையாடலுக்கு சர்வர் AI இணைப்பு தேவை.'));
   };
 }
-
