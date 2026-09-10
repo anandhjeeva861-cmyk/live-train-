@@ -1,0 +1,126 @@
+[
+  {
+    "id": "df269bf1-e0f5-4419-9ab6-2064561741ca",
+    "pnr": "3126726574",
+    "status": "CONFIRMED",
+    "trainId": "south-heritage",
+    "trainNo": "TR101",
+    "trainName": "South Heritage Tourism Special",
+    "type": "tourism",
+    "from": {
+      "code": "MAS",
+      "name": "MGR Chennai Central",
+      "city": "Chennai",
+      "lat": 13.0827,
+      "lng": 80.2707
+    },
+    "to": {
+      "code": "SBC",
+      "name": "KSR Bengaluru City",
+      "city": "Bengaluru",
+      "lat": 12.9784,
+      "lng": 77.5725
+    },
+    "journeyDate": "2026-09-11",
+    "travelClass": "EV",
+    "passengers": 1,
+    "seat": "S3",
+    "coach": "C2",
+    "fare": 1499,
+    "paymentStatus": "DEMO_SUCCESS",
+    "createdAt": "2026-09-10T14:15:09.768Z"
+  },
+  {
+    "id": "d64af245-753b-4cd4-9ecc-bd434818acf7",
+    "pnr": "6292789420",
+    "status": "CONFIRMED",
+    "trainId": "brindavan",
+    "trainNo": "12639",
+    "trainName": "Brindavan Express",
+    "type": "normal",
+    "from": {
+      "code": "MAS",
+      "name": "MGR Chennai Central",
+      "city": "Chennai",
+      "lat": 13.0827,
+      "lng": 80.2707
+    },
+    "to": {
+      "code": "SBC",
+      "name": "KSR Bengaluru City",
+      "city": "Bengaluru",
+      "lat": 12.9784,
+      "lng": 77.5725
+    },
+    "journeyDate": "2026-09-11",
+    "travelClass": "2S",
+    "passengers": 1,
+    "seat": "S1",
+    "coach": "C2",
+    "fare": 190,
+    "paymentStatus": "DEMO_SUCCESS",
+    "createdAt": "2026-09-10T14:16:00.559Z"
+  },
+  {
+    "id": "598de5aa-b296-4e59-b8f8-1f973629c819",
+    "pnr": "4406564138",
+    "status": "CONFIRMED",
+    "trainId": "cheran",
+    "trainNo": "12673",
+    "trainName": "Cheran Superfast Express",
+    "type": "normal",
+    "from": {
+      "code": "MAS",
+      "name": "MGR Chennai Central",
+      "city": "Chennai",
+      "lat": 13.0827,
+      "lng": 80.2707
+    },
+    "to": {
+      "code": "CBE",
+      "name": "Coimbatore Junction",
+      "city": "Coimbatore",
+      "lat": 10.9964,
+      "lng": 76.9673
+    },
+    "journeyDate": "2026-09-11",
+    "travelClass": "SL",
+    "passengers": 3,
+    "seat": "S1",
+    "coach": "S6",
+    "fare": 1170,
+    "paymentStatus": "DEMO_SUCCESS",
+    "createdAt": "2026-09-10T14:42:34.391Z"
+  },
+  {
+    "id": "4bd27095-4e6f-4b91-a1e8-63e3a689af53",
+    "pnr": "1116136478",
+    "status": "CONFIRMED",
+    "trainId": "cheran",
+    "trainNo": "12673",
+    "trainName": "Cheran Superfast Express",
+    "type": "normal",
+    "from": {
+      "code": "MAS",
+      "name": "MGR Chennai Central",
+      "city": "Chennai",
+      "lat": 13.0827,
+      "lng": 80.2707
+    },
+    "to": {
+      "code": "CBE",
+      "name": "Coimbatore Junction",
+      "city": "Coimbatore",
+      "lat": 10.9964,
+      "lng": 76.9673
+    },
+    "journeyDate": "2026-09-11",
+    "travelClass": "SL",
+    "passengers": 1,
+    "seat": "S8",
+    "coach": "S6",
+    "fare": 390,
+    "paymentStatus": "DEMO_SUCCESS",
+    "createdAt": "2026-09-10T15:51:19.863Z"
+  }
+]

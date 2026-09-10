@@ -1,0 +1,23 @@
+{
+  "name": "live-train-tracking-first-fullstack",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "check": "node --check server.js && node --check assistant.js && node --check public/app.js && node --check public/design.js && node --check public/assistant.js",
+    "test": "node --test tests/assistant.test.js",
+    "test:browser": "node --test tests/assistant.browser.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}
