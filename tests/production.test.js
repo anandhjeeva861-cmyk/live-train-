@@ -8,6 +8,7 @@ test('production never enables development OTP or Google bypass', () => {
   const rejected = spawnSync(process.execPath, ['--input-type=module', '-e', "try { await import('./server.js'); process.exitCode=1; } catch { console.log('production startup rejected'); }"], { env, encoding: 'utf8', windowsHide: true });
   assert.equal(rejected.status, 0); assert.match(rejected.stdout, /production startup rejected/);
   env.DEV_OTP_MODE = 'false'; env.DEV_GOOGLE_AUTH = 'false';
+  env.SMS_PROVIDER = ''; // Never send real SMS from a regression test.
   const checked = spawnSync(process.execPath, ['--input-type=module', '-e', `
     const {app}=await import('./server.js');
     const server=app.listen(0,'127.0.0.1');

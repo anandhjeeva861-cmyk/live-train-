@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { rateLimit } from 'express-rate-limit';
 import { OAuth2Client } from 'google-auth-library';
 import { prisma, writeTransaction } from './db.js';
+import { createSmsProvider } from './sms.js';
 
 export const production = process.env.NODE_ENV === 'production';
 export const devOtp = !production && process.env.DEV_OTP_MODE === 'true';
@@ -40,6 +41,7 @@ export function authMiddleware() {
 
 export async function requireAuth(req, _res, next) {
   if (!req.session.userId) throw fail(401, 'Sign in to continue.');
+  if (!devOtp && !devGoogle && req.session.authenticationMode !== 'real') throw fail(401, 'Please sign in again using real SMS and Google verification.');
   const user = await prisma.user.findUnique({ where: { id: req.session.userId } });
   if (!user) throw fail(401, 'Sign in to continue.');
   req.user = user;
@@ -49,45 +51,77 @@ export async function requireAuth(req, _res, next) {
 const phoneSchema = z.string().transform(value => value.replace(/^\+91/, '')).pipe(z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid Indian 10-digit mobile number.'));
 const save = req => new Promise((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
 const regenerate = req => new Promise((resolve, reject) => req.session.regenerate(error => error ? reject(error) : resolve()));
+const hasVerifiedMobile = req => Boolean(req.session.verifiedMobile && req.session.verifiedUntil > Date.now() && req.session.verifiedProvider === (devOtp ? 'demo' : 'twilio-verify'));
 
-export function registerAuth(app) {
+export function googleConfiguration(env = process.env) {
+  try {
+    const callback = new URL(env.GOOGLE_CALLBACK_URL);
+    const validUrl = !callback.username && !callback.password && !callback.search && !callback.hash &&
+      callback.pathname === '/api/auth/google/callback' &&
+      (callback.protocol === 'https:' || (!production && callback.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(callback.hostname)));
+    return { ready: Boolean(validUrl && env.GOOGLE_CLIENT_ID?.trim() && env.GOOGLE_CLIENT_SECRET?.trim()), origin: callback.origin };
+  } catch { return { ready: false }; }
+}
+
+export function registerAuth(app, { smsProvider = createSmsProvider(), googleClientFactory = () => new OAuth2Client(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, process.env.GOOGLE_CALLBACK_URL) } = {}) {
   const limit = rateLimit({ windowMs: 15 * 60_000, limit: 40, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'Too many login attempts. Try again later.' } });
   app.use('/api/auth', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
-  app.get('/api/auth/config', (_req, res) => res.json({ devOtp, devGoogle, development: !production }));
+  app.get('/api/auth/config', (req, res) => res.json({ devOtp, devGoogle, development: !production,
+    smsReady: devOtp || smsProvider.configured(), googleReady: devGoogle || googleConfiguration().ready,
+    mobileVerified: hasVerifiedMobile(req),
+  }));
   app.post('/api/auth/send-otp', limit, async (req, res) => {
     const mobileNumber = phoneSchema.parse(req.body?.mobileNumber);
-    if (!devOtp) throw fail(503, 'SMS delivery is not configured. Contact the operator.');
-    const otpHash = await bcrypt.hash('123456', 12);
+    if (!devOtp && !smsProvider.configured()) throw fail(503, 'SMS sign-in is not configured yet. Contact the app owner.');
+    const otpHash = devOtp ? await bcrypt.hash('123456', 12) : null;
     const challenge = await writeTransaction(async tx => {
       const existing = await tx.otpVerification.findUnique({ where: { mobileNumber } });
       if (existing && Date.now() - existing.createdAt.getTime() < 60_000) throw fail(429, 'Wait 60 seconds before requesting another OTP.');
-      const data = { id: crypto.randomUUID(), otpHash, expiresAt: new Date(Date.now() + 5 * 60_000), attempts: 0, verified: false, createdAt: new Date() };
+      const data = { id: crypto.randomUUID(), otpHash, provider: devOtp ? 'demo' : 'twilio-verify',
+        providerVerificationId: null, deliveryStatus: devOtp ? 'sent' : 'pending',
+        expiresAt: new Date(Date.now() + 5 * 60_000), attempts: 0, verified: false, createdAt: new Date() };
       return tx.otpVerification.upsert({ where: { mobileNumber }, create: { mobileNumber, ...data }, update: data });
     });
     delete req.session.verifiedMobile;
+    delete req.session.verifiedProvider;
+    delete req.session.verifiedUntil;
+    delete req.session.codeVerifier;
     delete req.session.oauthState;
     req.session.challengeId = challenge.id;
     await save(req);
-    res.json({ sent: true, development: true, expiresIn: 300, resendAfter: 60 });
+    if (!devOtp) {
+      try {
+        const providerVerificationId = await smsProvider.send(mobileNumber);
+        await prisma.otpVerification.update({ where: { id: challenge.id }, data: { providerVerificationId, deliveryStatus: 'sent' } });
+      } catch {
+        await prisma.otpVerification.updateMany({ where: { id: challenge.id }, data: { deliveryStatus: 'failed', expiresAt: new Date() } });
+        throw fail(503, 'SMS could not be confirmed. Wait 60 seconds, then request another code.');
+      }
+    }
+    res.json({ sent: true, development: devOtp, expiresIn: 300, resendAfter: 60 });
   });
   app.post('/api/auth/verify-otp', limit, async (req, res) => {
     const mobileNumber = phoneSchema.parse(req.body?.mobileNumber);
     const otp = z.string().regex(/^\d{6}$/, 'Enter six OTP digits.').parse(req.body?.otp);
     const record = await prisma.otpVerification.findUnique({ where: { mobileNumber } });
     if (!record || record.id !== req.session.challengeId) throw fail(400, 'Request an OTP in this browser first.');
+    if (record.deliveryStatus !== 'sent' || record.provider !== (devOtp ? 'demo' : 'twilio-verify')) throw fail(400, 'Request a new SMS verification code.');
     const claim = await prisma.otpVerification.updateMany({ where: { id: record.id, verified: false, attempts: { lt: 5 }, expiresAt: { gt: new Date() } }, data: { attempts: { increment: 1 } } });
     if (!claim.count) throw fail(400, 'OTP expired, already used, or attempt limit reached. Request another OTP.');
-    if (!await bcrypt.compare(otp, record.otpHash)) throw fail(400, 'Incorrect OTP.');
+    const approved = devOtp ? Boolean(record.otpHash && await bcrypt.compare(otp, record.otpHash))
+      : Boolean(record.providerVerificationId && await smsProvider.verify(record.providerVerificationId, otp));
+    if (!approved) throw fail(400, 'Incorrect or expired OTP.');
     const consume = await prisma.otpVerification.updateMany({ where: { id: record.id, verified: false, expiresAt: { gt: new Date() } }, data: { verified: true } });
     if (!consume.count) throw fail(400, 'OTP already used.');
     await regenerate(req);
     req.session.verifiedMobile = mobileNumber;
+    req.session.verifiedProvider = record.provider;
     req.session.verifiedUntil = Date.now() + 10 * 60_000;
     await save(req);
     res.json({ verified: true, next: '/api/auth/google', development: devOtp });
   });
   function verifiedMobile(req) {
-    if (!req.session.verifiedMobile || req.session.verifiedUntil < Date.now()) throw fail(401, 'Verify your mobile OTP before Google login.');
+    if (!hasVerifiedMobile(req)) throw fail(401, 'Verify your mobile OTP before Google login.');
     return req.session.verifiedMobile;
   }
   async function finish(req, profile) {
@@ -96,21 +130,32 @@ export function registerAuth(app) {
       const linked = await tx.user.findFirst({ where: { OR: [{ googleId: profile.googleId }, ...(profile.email ? [{ email: profile.email }] : [])] } });
       if (linked && linked.mobileNumber !== mobileNumber) throw fail(409, 'This Google account is linked to a different mobile number.');
       const mobileUser = await tx.user.findUnique({ where: { mobileNumber } });
-      if (mobileUser?.googleId && mobileUser.googleId !== profile.googleId) throw fail(409, 'Use the Google account linked to this mobile number.');
+      const upgradeDemo = !devGoogle && mobileUser?.googleId?.startsWith('development:');
+      if (mobileUser?.googleId && mobileUser.googleId !== profile.googleId && !upgradeDemo) throw fail(409, 'Use the Google account linked to this mobile number.');
       return tx.user.upsert({ where: { mobileNumber }, create: { mobileNumber, mobileVerified: true, ...profile }, update: { mobileVerified: true, ...profile } });
     });
     await regenerate(req);
     req.session.userId = user.id;
+    req.session.authenticationMode = !devOtp && !devGoogle ? 'real' : 'development';
     await save(req);
   }
-  const oauth = () => new OAuth2Client(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, process.env.GOOGLE_CALLBACK_URL);
+  const oauth = googleClientFactory;
+  const loginError = (res, code) => res.redirect(`/login?error=${code}`);
   app.get('/api/auth/google', limit, async (req, res) => {
+    const configuration = googleConfiguration();
+    // Google must return to the same host that owns the OTP session cookie.
+    // Do not transfer session IDs or phone verification through redirect URLs.
+    if (!devGoogle && configuration.ready && `${req.protocol}://${req.get('host')}` !== configuration.origin) return res.redirect(`${configuration.origin}/login?error=host`);
+    if (!hasVerifiedMobile(req)) {
+      if (devGoogle) throw fail(401, 'Verify your mobile OTP before Google login.');
+      return loginError(res, 'mobile');
+    }
     const mobile = verifiedMobile(req);
     if (devGoogle) {
       await finish(req, { googleId: `development:${mobile}`, email: null, name: 'Demo Traveller', avatar: null });
       return res.redirect('/dashboard');
     }
-    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_CALLBACK_URL) throw fail(503, 'Google OAuth is not configured.');
+    if (!configuration.ready) return loginError(res, 'configuration');
     req.session.oauthState = crypto.randomBytes(32).toString('hex');
     const { codeVerifier, codeChallenge } = await oauth().generateCodeVerifierAsync();
     req.session.codeVerifier = codeVerifier;
@@ -118,13 +163,13 @@ export function registerAuth(app) {
     res.redirect(oauth().generateAuthUrl({ scope: ['openid', 'email', 'profile'], state: req.session.oauthState, code_challenge: codeChallenge, code_challenge_method: 'S256', prompt: 'select_account' }));
   });
   app.get('/api/auth/google/callback', limit, async (req, res) => {
-    verifiedMobile(req);
-    if (typeof req.query.state !== 'string' || !req.session.oauthState || req.query.state !== req.session.oauthState) throw fail(400, 'Invalid OAuth state. Restart sign-in.');
+    if (!hasVerifiedMobile(req)) return loginError(res, 'mobile');
+    if (typeof req.query.state !== 'string' || !req.session.oauthState || req.query.state !== req.session.oauthState) return loginError(res, 'state');
     delete req.session.oauthState;
     const codeVerifier = req.session.codeVerifier;
     delete req.session.codeVerifier;
     await save(req);
-    if (req.query.error || typeof req.query.code !== 'string') return res.redirect('/login?error=google');
+    if (req.query.error || typeof req.query.code !== 'string') return loginError(res, 'denied');
     try {
       const client = oauth();
       const { tokens } = await client.getToken({ code: req.query.code, codeVerifier });
@@ -133,7 +178,7 @@ export function registerAuth(app) {
       if (!profile?.sub || !profile.email_verified) throw fail(401, 'Google email must be verified.');
       await finish(req, { googleId: profile.sub, email: profile.email, name: profile.name || 'Traveller', avatar: profile.picture || null });
       res.redirect('/dashboard');
-    } catch (error) { if (error.status) throw error; throw fail(502, 'Google login failed. Restart sign-in.'); }
+    } catch (error) { return loginError(res, error.status === 409 ? 'account' : 'google'); }
   });
   app.get('/api/auth/me', requireAuth, (req, res) => res.json({ user: req.user, development: devGoogle }));
   app.post('/api/auth/logout', async (req, res) => {

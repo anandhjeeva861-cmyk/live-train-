@@ -22,7 +22,10 @@ model User {
 model OtpVerification {
   id           String   @id @default(cuid())
   mobileNumber String   @unique
-  otpHash      String
+  otpHash      String?
+  provider     String   @default("demo")
+  providerVerificationId String?
+  deliveryStatus String @default("sent")
   expiresAt    DateTime
   attempts     Int      @default(0)
   verified     Boolean  @default(false)

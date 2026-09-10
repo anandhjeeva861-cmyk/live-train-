@@ -8,12 +8,13 @@
     "start": "node server.js",
     "build:pages": "node scripts/build-pages.js",
     "check": "node scripts/check.js",
-    "test": "node --test tests/assistant.test.js tests/tracking.test.js tests/backend.test.js tests/production.test.js",
+    "test": "node --test tests/assistant.test.js tests/tracking.test.js tests/backend.test.js tests/production.test.js tests/real-auth.test.js",
     "test:browser": "node --test tests/assistant.browser.test.js",
     "test:pages": "node scripts/build-pages.js --check && node --test tests/pages.browser.test.js",
     "export:mock": "node scripts/export-mock-data.js",
     "security:secrets": "node scripts/check-secrets.js",
-    "test:fullstack": "node --test tests/fullstack.browser.test.js"
+    "test:fullstack": "node --test tests/fullstack.browser.test.js",
+    "auth:check": "node scripts/check-auth.js"
   },
   "engines": {
     "node": ">=22.12"

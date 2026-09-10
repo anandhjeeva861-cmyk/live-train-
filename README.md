@@ -4,7 +4,7 @@ The existing Vande Bharat dashboard, HTML/CSS/JavaScript frontend, Leaflet maps,
 
 ## Run locally
 
-Requires Node.js **22.12+** (tested on Node 24) and npm. No PostgreSQL, SMS account or Google credentials are needed locally.
+Requires Node.js **22.12+** (tested on Node 24) and npm. No PostgreSQL installation is needed. Real login requires Twilio Verify and Google OAuth credentials: follow [AUTH_SETUP.md](AUTH_SETUP.md), then run `npm run auth:check`. Real authentication is now the default; missing credentials show a setup message without silently using demo login.
 
 ```powershell
 npm install
@@ -28,6 +28,8 @@ For an already configured database, `npm start` runs the server without migratio
 
 ## Development login and booking
 
+For offline testing only, explicitly set both `DEV_OTP_MODE=true` and `DEV_GOOGLE_AUTH=true` in local `.env` and restart. With the default `false` values, enter the code actually received by SMS and complete Google's account chooser. Automated tests configure their own isolated demo environment.
+
 1. Open `/login`, or select **Sign in / Profile**.
 2. Enter an Indian 10-digit mobile number starting with 6–9. The UI supplies +91; the API also accepts the +91 prefix.
 3. Enter development OTP **123456**.
@@ -35,7 +37,7 @@ For an already configured database, `npm start` runs the server without migratio
 5. Search Chennai (MAS) → Bengaluru (SBC), choose a date and train type, select **Book Now**, enter each passenger's details, choose the first passenger's seat and confirm. Other passengers receive distinct available seats in that class.
 6. View saved PNRs in **My Bookings**, use a PNR or train number for tracking, or cancel a demo ticket to restore seats.
 
-OTP hashes use bcrypt, codes expire after five minutes, attempts are limited to five, and resending requires 60 seconds. Google login requires a recently verified mobile in the same browser. Sessions use HttpOnly, SameSite cookies and SQLite storage. Logging out revokes the session and its streams. Bookings and PNR lookups are restricted to their owner.
+Demo OTP hashes use bcrypt; real OTP generation and checking belong to Twilio Verify, with only the provider verification ID stored locally. Codes expire locally after five minutes, attempts are limited to five, and resending requires 60 seconds. Google login requires a recently verified mobile in the same browser. Sessions use HttpOnly, SameSite cookies and SQLite storage. Logging out revokes the session and its streams. Bookings and PNR lookups are restricted to their owner.
 
 The four old, unowned JSON demo bookings remain intact in `data/bookings.json`. They are not silently assigned to a new account. New bookings use the database; the separate static Pages demo continues to use browser storage.
 
@@ -135,7 +137,7 @@ Production startup refuses `DEV_OTP_MODE=true` or `DEV_GOOGLE_AUTH=true` and req
 
 Remaining production integrations:
 
-- An SMS delivery adapter/provider. Production OTP sending currently returns 503; entering SMS credentials alone does not implement delivery.
+- Twilio account credentials and a Verify Service with SMS enabled. The adapter is implemented; actual delivery requires an active account with recipient/country access. See [AUTH_SETUP.md](AUTH_SETUP.md).
 - Google OAuth client ID, client secret and registered callback URL. State, PKCE and ID-token verification are implemented; real credentials were unavailable for testing.
 - Authorized railway tracking, reservation/PNR and ticket-issuance providers. Production tracking returns 503 until a real provider is added.
 - Payment provider and verified webhooks for real payments. Current tickets/cancellations have no money movement and are not valid railway tickets.
