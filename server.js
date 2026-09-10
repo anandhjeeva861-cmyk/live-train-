@@ -6,6 +6,8 @@ import { fileURLToPath } from 'url';
 import { trains, stations, touristSpots } from './data/mockData.js';
 import dotenv from 'dotenv';
 import { registerAssistant } from './assistant.js';
+import { getLiveState } from './public/shared/tracking.js';
+import { getWeatherData } from './public/shared/weather.js';
 
 dotenv.config({ path: fileURLToPath(new URL('.env', import.meta.url)), quiet: true });
 
@@ -14,9 +16,20 @@ const PORT = Number(process.env.PORT) || 4173;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const BOOKINGS_FILE = path.join(__dirname, 'data', 'bookings.json');
-const weatherCache = new Map();
 
 app.disable('x-powered-by');
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(value => value.trim().replace(/\/$/, '')).filter(Boolean);
+app.use('/api', (req, res, next) => {
+  const origin = req.get('Origin');
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+  }
+  next();
+});
 app.use(express.json({ limit: '64kb' }));
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -25,93 +38,6 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.static(path.join(__dirname, 'public')));
-
-const toRad = deg => (deg * Math.PI) / 180;
-const toDeg = rad => (rad * 180) / Math.PI;
-
-function haversineKm(a, b) {
-  const R = 6371;
-  const dLat = toRad(b.lat - a.lat);
-  const dLon = toRad(b.lng - a.lng);
-  const q = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(q));
-}
-
-function bearingDeg(a, b) {
-  const y = Math.sin(toRad(b.lng - a.lng)) * Math.cos(toRad(b.lat));
-  const x = Math.cos(toRad(a.lat)) * Math.sin(toRad(b.lat)) - Math.sin(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.cos(toRad(b.lng - a.lng));
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
-}
-
-function interpolate(a, b, t) {
-  return { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t };
-}
-
-function routeMetrics(route) {
-  const segmentKm = [];
-  let totalKm = 0;
-  for (let i = 0; i < route.length - 1; i += 1) {
-    const km = haversineKm(route[i], route[i + 1]);
-    segmentKm.push(km);
-    totalKm += km;
-  }
-  return { segmentKm, totalKm };
-}
-
-function numericSeed(text) {
-  return [...text].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-}
-
-function getLiveState(train) {
-  const metrics = routeMetrics(train.route);
-  const cycleSeconds = 48 * 60;
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  const offset = numericSeed(train.id) * 19;
-  const progress = ((nowSeconds + offset) % cycleSeconds) / cycleSeconds;
-  const distanceTravelledKm = Math.min(metrics.totalKm * progress, Math.max(metrics.totalKm - 0.01, 0));
-
-  let remainingOnRoute = distanceTravelledKm;
-  let leg = 0;
-  while (leg < metrics.segmentKm.length - 1 && remainingOnRoute > metrics.segmentKm[leg]) {
-    remainingOnRoute -= metrics.segmentKm[leg];
-    leg += 1;
-  }
-
-  const legDistance = metrics.segmentKm[leg] || 1;
-  const legProgress = Math.min(1, remainingOnRoute / legDistance);
-  const fromPoint = train.route[leg];
-  const toPoint = train.route[Math.min(leg + 1, train.route.length - 1)];
-  const position = interpolate(fromPoint, toPoint, legProgress);
-  const speedKmph = Math.round(66 + 24 * Math.sin((nowSeconds + offset) / 31) + 8 * Math.sin((nowSeconds + offset) / 7));
-  const safeSpeed = Math.max(38, speedKmph);
-  const distanceRemainingKm = Math.max(0, metrics.totalKm - distanceTravelledKm);
-  const etaMinutes = Math.max(1, Math.round((distanceRemainingKm / safeSpeed) * 60));
-  const delayMinutes = Math.max(0, Math.round(7 * Math.sin((nowSeconds + offset) / 97)));
-  const arrivalAt = new Date(Date.now() + etaMinutes * 60_000).toISOString();
-
-  return {
-    trainId: train.id,
-    trainNo: train.number,
-    trainName: train.name,
-    lat: Number(position.lat.toFixed(6)),
-    lng: Number(position.lng.toFixed(6)),
-    bearing: Number(bearingDeg(fromPoint, toPoint).toFixed(1)),
-    speedKmph: safeSpeed,
-    progress: Number(progress.toFixed(4)),
-    segmentProgress: Number(legProgress.toFixed(4)),
-    currentSection: `${fromPoint.code} → ${toPoint.code}`,
-    previousStation: fromPoint.name,
-    nextStation: toPoint.name,
-    nextStationCode: toPoint.code,
-    etaMinutes,
-    arrivalAt,
-    distanceRemainingKm: Number(distanceRemainingKm.toFixed(1)),
-    delayMinutes,
-    runningStatus: delayMinutes <= 2 ? 'ON_TIME' : 'DELAYED',
-    platform: String(((numericSeed(toPoint.code) + leg) % 6) + 1),
-    updatedAt: new Date().toISOString()
-  };
-}
 
 function parseType(value) {
   const type = String(value || 'all').toLowerCase();
@@ -198,31 +124,6 @@ app.get('/api/tourist-spots', (req, res) => {
   const list = city ? touristSpots.filter(s => s.city.toLowerCase() === city) : touristSpots;
   res.json(list.slice(0, 12));
 });
-
-async function getWeatherData(lat, lng) {
-  const key = `${lat.toFixed(2)},${lng.toFixed(2)}`;
-  const cached = weatherCache.get(key);
-  if (cached && Date.now() - cached.time < 10 * 60_000) return { ...cached.data, cached: true };
-
-  try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lng)}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&hourly=temperature_2m,weather_code,precipitation_probability&timezone=auto&forecast_days=2`;
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!response.ok) throw new Error(`Weather provider status ${response.status}`);
-    const data = await response.json();
-    weatherCache.set(key, { time: Date.now(), data });
-    return data;
-  } catch {
-    return {
-      current: { temperature_2m: 29, apparent_temperature: 31, weather_code: 2, wind_speed_10m: 13 },
-      hourly: {
-        temperature_2m: [29, 29, 28, 28, 27, 27],
-        weather_code: [2, 2, 3, 61, 61, 3],
-        precipitation_probability: [16, 18, 25, 42, 38, 22]
-      },
-      fallback: true
-    };
-  }
-}
 
 app.get('/api/weather', async (req, res) => {
   const lat = Number(req.query.lat);

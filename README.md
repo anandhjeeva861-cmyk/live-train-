@@ -36,6 +36,22 @@ Open: `http://localhost:4173`
 
 Node.js 18+ is required.
 
+## GitHub Pages deployment
+
+The repository root now contains a generated `index.html` and `.nojekyll`, so GitHub Pages serves the app instead of turning this README into the homepage. Relative asset URLs and the entry page's `./public/` base support project URLs such as `https://anandhjeeva861-cmyk.github.io/live-train-/`.
+
+Keep **Settings → Pages → Deploy from a branch → main → / (root)**. No backend, build service or API key is needed for the browser demo. After editing `public/index.html`, run `npm run build:pages` and commit the generated root `index.html` alongside the source changes. Normal pushes to `main` then use GitHub's existing Pages deployment.
+
+On GitHub Pages, the app clearly labels **Browser demo**. Train search, seat selection, demo PNR lookup, simulated tracking, destination cards and basic Tamil/English voice commands work in the browser. Tickets are saved only in this browser on this device and are not synchronized with server bookings or other devices. Weather still uses Open-Meteo when reachable; browser speech support and device voice availability still apply. Free-form OpenAI conversation requires a hosted Node.js backend: [GitHub Pages hosts static files](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages), not this application's Express server.
+
+To connect an independently hosted backend later:
+
+1. Run this repository as a Node.js service with `npm ci --omit=dev` and `npm start`.
+2. Set `ALLOWED_ORIGINS=https://anandhjeeva861-cmyk.github.io` on that server. Keep `OPENAI_API_KEY` on the server only. Provision persistent storage for server bookings if needed.
+3. Set `apiBase` in `public/config.js` to the backend's HTTPS origin and push the change. This switches the frontend to server APIs and SSE. It does not silently switch back to browser bookings if the backend is down.
+
+`npm run test:pages` serves the repository under `/live-train-/` with **no API backend** and checks styling/assets, search, booking and persistence, PNR lookup, simulated telemetry, assistant commands, navigation and mobile widths. `npm run test:browser` verifies the separate Express mode. Shared catalog, telemetry, weather and command logic live in `public/shared/`; server credentials and provider calls stay in `assistant.js` on the server.
+
 ## Useful endpoints
 
 - `GET /api/health`

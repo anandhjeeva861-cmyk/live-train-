@@ -63,7 +63,7 @@
     el('assistantSuggestions').replaceChildren(...samples.map(text => { const button = document.createElement('button'); button.textContent = text; button.onclick = () => { input.value = text; submit(); }; return button; }));
   }
   async function refreshMode() {
-    try { const response = await fetch('/api/assistant/status'); if (!response.ok) throw new Error(); const data = await response.json(); el('assistantMode').textContent = data.mode === 'ai' ? 'AI connected · Tamil & English' : 'Basic commands · Tamil & English'; }
+    try { const data = await LiveTrainAPI.request('/api/assistant/status'); el('assistantMode').textContent = data.mode === 'ai' ? 'AI connected · Tamil & English' : 'Basic commands · Tamil & English'; }
     catch { el('assistantMode').textContent = 'Assistant server unavailable'; status('Restart the Live Train server to connect the assistant.'); }
   }
   function open() {
@@ -111,8 +111,7 @@
     const controller = new AbortController(); request = controller;
     const timeout = setTimeout(() => controller.abort(), 30000);
     try {
-      const response = await fetch('/api/assistant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ message: text, language: selectedLanguage, history: history.slice(-6), context: { from: el('fromStation').value, to: el('toStation').value, date: el('journeyDate').value, passengers: Number(el('passengers').value), type: state.type, trainId: state.selectedTrain?.id } }) });
-      const answer = await response.json(); if (!response.ok) throw new Error(answer.error || 'Assistant request failed.');
+      const answer = await LiveTrainAPI.request('/api/assistant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ message: text, language: selectedLanguage, history: history.slice(-6), context: { from: el('fromStation').value, to: el('toStation').value, date: el('journeyDate').value, passengers: Number(el('passengers').value), type: state.type, trainId: state.selectedTrain?.id } }) });
       if (revision !== currentRevision) return;
       if (typeof answer.reply !== 'string' || !answer.reply.trim()) throw new Error('No reply was received. Please try again.');
       const target = await applyAction(answer.action, currentRevision); if (revision !== currentRevision) return;

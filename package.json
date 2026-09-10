@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
-    "check": "node --check server.js && node --check assistant.js && node --check public/app.js && node --check public/design.js && node --check public/assistant.js",
+    "build:pages": "node scripts/build-pages.js",
+    "check": "node scripts/check.js",
     "test": "node --test tests/assistant.test.js",
-    "test:browser": "node --test tests/assistant.browser.test.js"
+    "test:browser": "node --test tests/assistant.browser.test.js",
+    "test:pages": "node scripts/build-pages.js --check && node --test tests/pages.browser.test.js"
   },
   "engines": {
     "node": ">=18"

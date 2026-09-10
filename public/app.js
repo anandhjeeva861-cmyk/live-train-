@@ -60,11 +60,7 @@ function showToast(message) {
 }
 
 async function fetchJson(url, options) {
-  const response = await fetch(url, options);
-  let payload = {};
-  try { payload = await response.json(); } catch { payload = {}; }
-  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
-  return payload;
+  return LiveTrainAPI.request(url, options);
 }
 
 async function loadStations() {
@@ -240,7 +236,7 @@ async function confirmBooking(train) {
         <div><small>Coach / Seat</small><b>${escapeHtml(booking.coach)} / ${escapeHtml(booking.seat)}</b></div>
         <div><small>Total</small><b>₹${escapeHtml(booking.fare)}</b></div>
       </div>
-      <p style="font-size:11px;color:#66788f">Demo booking saved on the server. Real payment and railway ticket issuance must be connected to authorized providers before production.</p>
+      <p style="font-size:11px;color:#66788f">${LiveTrainAPI.isStatic ? 'Demo booking saved in this browser on this device.' : 'Demo booking saved on the server.'} This is not a valid railway ticket.</p>
       <button class="primary-button full" id="trackBookedTrain">View live tracking</button>`;
     $('#trackBookedTrain').onclick = () => {
       $('#bookingModal').hidden = true;
@@ -333,8 +329,16 @@ function connectLiveStream(train) {
   badge.textContent = '● Connecting';
   badge.className = 'connection-badge offline';
 
+  if (LiveTrainAPI.isStatic) {
+    badge.textContent = '● Browser simulation';
+    badge.className = 'connection-badge online';
+    updateLiveOnce();
+    state.pollingTimer = setInterval(updateLiveOnce, 2000);
+    return;
+  }
+
   if ('EventSource' in window) {
-    const source = new EventSource(`/api/trains/${encodeURIComponent(train.id)}/live-stream`);
+    const source = new EventSource(LiveTrainAPI.apiUrl(`/api/trains/${encodeURIComponent(train.id)}/live-stream`));
     state.eventSource = source;
     source.addEventListener('live', event => {
       try { applyLiveState(JSON.parse(event.data)); } catch { /* ignore malformed demo event */ }
@@ -449,7 +453,7 @@ async function loadSpots() {
   const city = selected?.dataset.city || '';
   try {
     state.spots = await fetchJson(`/api/tourist-spots?city=${encodeURIComponent(city)}`);
-    const localImages = { 3: '/assets/lalbagh.jpg', 4: '/assets/bangalore-palace.jpg', 6: '/assets/nandi-hills.jpg' };
+    const localImages = { 3: './assets/lalbagh.jpg', 4: './assets/bangalore-palace.jpg', 6: './assets/nandi-hills.jpg' };
     state.spots = state.spots.map(spot => ({ ...spot, image: localImages[spot.id] || spot.image }));
     $('#spotGrid').innerHTML = state.spots.length ? state.spots.map(spot => `
       <article class="spot-card">
@@ -539,6 +543,7 @@ async function loadBookings() {
 }
 
 function bindEvents() {
+  $('.brand').addEventListener('click', event => { event.preventDefault(); scrollToId('home'); });
   $$('.booking-tab').forEach(button => button.onclick = () => {
     setType(button.dataset.type);
     searchTrains();
