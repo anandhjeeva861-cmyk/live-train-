@@ -1,0 +1,45 @@
+# Optional deployment blueprint. Creating this service requires a paid disk plan.
+# Nothing is provisioned simply by pushing this file to GitHub.
+services:
+  - type: web
+    name: railgo
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --include=dev && DATABASE_URL=file:./prisma/build.db npx prisma generate
+    startCommand: npx prisma migrate deploy && npx prisma db seed && npm start
+    healthCheckPath: /api/health
+    disk:
+      name: railgo-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        value: file:/var/data/railgo.db
+      - key: TRUST_PROXY
+        value: "true"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DEV_OTP_MODE
+        value: "false"
+      - key: DEV_GOOGLE_AUTH
+        value: "false"
+      - key: SMS_PROVIDER
+        value: twilio-verify
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_VERIFY_SERVICE_SID
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false

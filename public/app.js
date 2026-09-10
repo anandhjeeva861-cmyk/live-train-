@@ -391,6 +391,7 @@ async function selectTrackingTrain(train) {
   closeLiveConnection();
   state.selectedTrain = train;
   state.lastLive = null;
+  state.trackingSpots = [];
   document.dispatchEvent(new CustomEvent('train-selected', { detail: train }));
   state.lastWeatherAt = 0;
   $('#trackingTrainName').textContent = `${train.number} · ${train.name}`;
@@ -465,6 +466,7 @@ function formatArrival(iso) {
 
 function applyLiveState(live) {
   if (!state.selectedTrain || live.trainId !== state.selectedTrain.id) return;
+  if (state.lastLive && Date.parse(live.updatedAt) < Date.parse(state.lastLive.updatedAt)) return;
   $('#connectionBadge').textContent = LiveTrainAPI.isStatic ? '● Browser simulation' : '● Simulation stream';
   $('#connectionBadge').className = 'connection-badge online';
   const previousLive = state.lastLive;
@@ -531,13 +533,14 @@ async function loadWeather(lat, lng) {
     const [icon, label] = weatherDescriptor(current.weather_code);
     $('#weatherIcon').textContent = icon;
     $('#weatherLabel').textContent = label + (weather.fallback ? ' · demo fallback' : '');
-    $('#tempValue').textContent = Math.round(current.temperature_2m ?? 29);
-    $('#feelsValue').textContent = `${Math.round(current.apparent_temperature ?? 31)}°`;
-    $('#windValue').textContent = `${Math.round(current.wind_speed_10m ?? 13)} km/h`;
-    $('#rainValue').textContent = `${weather.hourly?.precipitation_probability?.[0] ?? 16}%`;
+    const metric = (value, suffix = '') => Number.isFinite(value) ? `${Math.round(value)}${suffix}` : '—';
+    $('#tempValue').textContent = metric(current.temperature_2m);
+    $('#feelsValue').textContent = metric(current.apparent_temperature, '°');
+    $('#windValue').textContent = metric(current.wind_speed_10m, ' km/h');
     $('#weatherPlace').textContent = state.lastLive?.currentSection || 'Current train location';
 
-    const nextHour = Math.max(0, (weather.hourly?.time || []).findIndex(time => time > current.time));
+    const hourIndex = (weather.hourly?.time || []).findIndex(time => time > current.time);
+    const nextHour = hourIndex < 0 ? (weather.hourly?.time || []).length : hourIndex;
     const temperatures = (weather.hourly?.temperature_2m || []).slice(nextHour);
     const codes = (weather.hourly?.weather_code || []).slice(nextHour);
     const rain = (weather.hourly?.precipitation_probability || []).slice(nextHour);
@@ -545,7 +548,7 @@ async function loadWeather(lat, lng) {
     $('#forecastRow').innerHTML = Array.from({ length: 5 }, (_, index) => {
       const [, labelText] = weatherDescriptor(codes[index] ?? current.weather_code);
       const [forecastIcon] = weatherDescriptor(codes[index] ?? current.weather_code);
-      return `<div class="forecast-item"><b>+${index + 1}h</b><span title="${escapeHtml(labelText)}">${forecastIcon}</span><small>${Math.round(temperatures[index] ?? current.temperature_2m ?? 29)}° · ${rain[index] ?? 0}%</small></div>`;
+      return `<div class="forecast-item"><b>+${index + 1}h</b><span title="${escapeHtml(labelText)}">${forecastIcon}</span><small>${metric(temperatures[index], '°')} · ${metric(rain[index], '%')}</small></div>`;
     }).join('');
   } catch {
     if (state.selectedTrain?.id !== trainId) return;

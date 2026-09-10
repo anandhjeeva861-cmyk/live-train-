@@ -81,5 +81,11 @@ test('GitHub Pages works under a repository path with no backend', { timeout: 90
     assert.deepEqual(apiCalls, [], 'Static demo must not request nonexistent /api endpoints');
     assert.deepEqual(failedLocal, [], 'All repository-relative assets must load');
     assert.deepEqual(errors, []);
+    // A configured backend must own login cookies; don't attempt cross-site OTP fetches.
+    await page.route('**/public/config.js', route => route.fulfill({ contentType: 'application/javascript', body: "window.LIVE_TRAIN_CONFIG = { apiBase: 'https://railgo.example.test' };" }));
+    await page.route('https://railgo.example.test/login', route => route.fulfill({ contentType: 'text/html', body: '<h1>Hosted RailGo login</h1>' }));
+    await page.goto(url, { waitUntil: 'commit' });
+    await page.waitForURL('https://railgo.example.test/login');
+    assert.equal(await page.locator('h1').innerText(), 'Hosted RailGo login');
   } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
 });

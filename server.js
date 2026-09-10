@@ -53,9 +53,10 @@ registerAssistant(app, { getLiveState: liveSnapshot, getWeatherData, getCatalog:
   trains: (await loadTrains()).map(trainDto),
   touristSpots: (await prisma.touristSpot.findMany({ include: { station: true } })).map(spotDto),
 }) });
-app.get(['/dashboard', '/book', '/tracking', '/bookings'], (req, res, next) => {
-  if (!req.session.userId) return res.redirect('/login');
-  next();
+app.get(['/dashboard', '/book', '/tracking', '/bookings'], async (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  try { await requireAuth(req, res, next); }
+  catch (error) { if (error.status === 401) return res.redirect('/login'); throw error; }
 });
 app.use(express.static(path.join(root, 'public')));
 app.get(['/', '/login', '/dashboard', '/book', '/tracking', '/bookings'], (_req, res) => res.sendFile(path.join(root, 'public/index.html')));

@@ -39,8 +39,14 @@ test('login, checkout, reload/restart persistence, tracking and responsive front
     await page.locator('#authPhone').fill('9876501234');
     await page.locator('#phoneForm button').click();
     await page.waitForSelector('#otpForm');
+    await page.reload();
+    await page.waitForSelector('#otpForm');
+    assert.match(await page.locator('#authModal').innerText(), /9876501234/);
     for (let i = 0; i < 6; i++) await page.locator('.otp-row input').nth(i).fill(String(i + 1));
     await page.locator('#otpForm button').click();
+    await page.waitForSelector('#googleLogin');
+    await page.locator('#closeAuth').click();
+    await page.locator('#profileBtn').click();
     await page.waitForSelector('#googleLogin');
     assert.match(await page.locator('#authModal').innerText(), /DEVELOPMENT LOGIN/);
     await Promise.all([page.waitForURL('**/dashboard'), page.locator('#googleLogin').click()]);

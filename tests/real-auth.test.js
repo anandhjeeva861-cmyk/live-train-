@@ -68,6 +68,9 @@ test('Real authentication routes with controlled provider responses (no SMS sent
       assert.equal(sent.status, 200); assert.equal(sent.body.development, false);
       const row = await prisma.otpVerification.findUnique({ where: { mobileNumber: phone } });
       assert.equal(row.otpHash, null); assert.equal(row.provider, 'twilio-verify'); assert.equal(row.providerVerificationId, `verification-${phone}`);
+      const resumed = (await a('/api/auth/config')).body.pendingOtp;
+      assert.equal(resumed.mobileNumber, phone); assert.equal(resumed.providerVerificationId, undefined);
+      assert.equal((await guest('/api/auth/config')).body.pendingOtp, null);
       assert.equal((await a('/api/auth/send-otp', { mobileNumber: phone })).status, 429);
       assert.equal((await a('/api/auth/verify-otp', { mobileNumber: phone, otp: '123456' })).status, 400);
       assert.equal((await guest('/api/auth/verify-otp', { mobileNumber: phone, otp: '654321' })).status, 400);

@@ -4,7 +4,7 @@
   if (LiveTrainAPI.isStatic) { model.ready = Promise.resolve(); return; }
   model.ready = Promise.all([
     LiveTrainAPI.request('/api/auth/me').then(data => { model.user = data.user; }).catch(() => {}),
-    LiveTrainAPI.request('/api/auth/config').then(data => { model.config = data; }).catch(() => {}),
+    LiveTrainAPI.request('/api/auth/config').then(data => { model.config = data; }).catch(() => { model.configError = true; }),
   ]);
   let phone = '', step = 0, resendAt = 0;
   const modal = document.createElement('div');
@@ -26,7 +26,12 @@
       document.getElementById('googleLogin').disabled = true;
       modal.querySelector('.auth-note').textContent = 'Google sign-in setup is incomplete. Please contact the app owner.';
     }
-    const run = async (button, work) => { button.disabled = true; document.getElementById('authError').textContent = ''; try { await work(); } catch (error) { document.getElementById('authError').textContent = error.message; } finally { button.disabled = false; } };
+    if (model.configError) {
+      modal.querySelector('.auth-note').textContent = 'Cannot reach the login service. Check your connection and retry.';
+      const retry = document.createElement('button'); retry.className = 'auth-link'; retry.textContent = 'Retry connection';
+      retry.onclick = async () => { retry.disabled = true; await model.open(); }; modal.querySelector('section').append(retry);
+    }
+    const run = async (button, work) => { if (button) button.disabled = true; document.getElementById('authError').textContent = ''; try { await work(); } catch (error) { const message = document.getElementById('authError'); if (message) message.textContent = error.message; } finally { if (button?.isConnected) button.disabled = false; } };
     if (step === 0) document.getElementById('phoneForm').onsubmit = event => {
       event.preventDefault(); phone = document.getElementById('authPhone').value;
       run(event.submitter, async () => { await request('send-otp', { mobileNumber: phone }); resendAt = Date.now() + 60000; step = 1; render(); });
@@ -49,7 +54,16 @@
     if (step === 2) document.getElementById('googleLogin').onclick = event => { event.currentTarget.disabled = true; location.assign(LiveTrainAPI.apiUrl('/api/auth/google')); };
     modal.querySelector('input, .primary-button, .google-button')?.focus();
   }
-  model.open = () => {
+  let openRequest = 0;
+  model.open = async () => {
+    const requestId = ++openRequest;
+    if (!model.user) {
+      try { model.config = await LiveTrainAPI.request('/api/auth/config'); model.configError = false; }
+      catch { model.config = {}; model.configError = true; }
+      if (requestId !== openRequest) return;
+      const pending = model.config.pendingOtp;
+      if (pending) { phone = pending.mobileNumber; resendAt = new Date(pending.resendAt).getTime(); }
+    }
     if (model.user) {
       modal.innerHTML = `<section class="modal auth-modal" role="dialog" aria-modal="true"><h2>${escapeHtml(model.user.name)}</h2><p>+91 ${escapeHtml(model.user.mobileNumber)}</p><button id="logoutBtn" class="primary-button">Log out</button><button id="closeProfile" class="auth-link">Close</button><p id="profileError" role="alert"></p></section>`;
       document.getElementById('closeProfile').onclick = close;
@@ -58,7 +72,7 @@
         try { await request('logout', {}); closeLiveConnection(); location.assign('/login'); }
         catch (error) { document.getElementById('profileError').textContent = error.message; event.target.disabled = false; }
       };
-    } else { step = model.config.mobileVerified ? 2 : 0; render(); }
+    } else { step = model.config.mobileVerified ? 2 : model.config.pendingOtp ? 1 : 0; render(); }
     modal.hidden = false;
   };
   model.require = () => { if (model.user) return true; model.open(); return false; };
@@ -79,7 +93,7 @@
     if (location.pathname === '/login') {
       if (model.user) location.replace('/dashboard');
       else {
-        model.open();
+        await model.open();
         const messages = {
           configuration: 'Google sign-in is not configured yet. Please contact the app owner.',
           mobile: 'Your mobile verification expired. Please verify your number again.',

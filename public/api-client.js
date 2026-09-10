@@ -1,9 +1,13 @@
 (() => {
   const scriptBase = new URL('.', document.currentScript.src);
   const configuredBase = String(window.LIVE_TRAIN_CONFIG?.apiBase || '').replace(/\/$/, '');
+  let movingToBackend = false;
   if (configuredBase) {
     const url = new URL(configuredBase);
-    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('Invalid Live Train backend URL');
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== '/') throw new Error('Invalid Live Train backend URL');
+    // The Express app serves the same frontend. Keep OTP, OAuth and session
+    // cookies on that origin instead of depending on third-party cookies.
+    if (url.origin !== location.origin) { movingToBackend = true; location.replace(`${url.origin}/login`); }
   }
   const isStatic = !configuredBase && (document.documentElement.dataset.hosting === 'static' || location.hostname.endsWith('.github.io'));
   let staticModule;
@@ -12,6 +16,7 @@
     return `${configuredBase || location.origin}${path}`;
   }
   async function request(path, options = {}) {
+    if (movingToBackend) return new Promise(() => {}); // Navigation owns the next page.
     if (options.signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
     if (isStatic) {
       staticModule ||= import(new URL('./static-api.js', scriptBase).href);

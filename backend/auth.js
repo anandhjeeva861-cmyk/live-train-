@@ -48,7 +48,7 @@ export async function requireAuth(req, _res, next) {
   next();
 }
 
-const phoneSchema = z.string().transform(value => value.replace(/^\+91/, '')).pipe(z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid Indian 10-digit mobile number.'));
+const phoneSchema = z.string().trim().transform(value => value.replace(/^\+91/, '')).pipe(z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid Indian 10-digit mobile number.'));
 const save = req => new Promise((resolve, reject) => req.session.save(error => error ? reject(error) : resolve()));
 const regenerate = req => new Promise((resolve, reject) => req.session.regenerate(error => error ? reject(error) : resolve()));
 const hasVerifiedMobile = req => Boolean(req.session.verifiedMobile && req.session.verifiedUntil > Date.now() && req.session.verifiedProvider === (devOtp ? 'demo' : 'twilio-verify'));
@@ -66,10 +66,19 @@ export function googleConfiguration(env = process.env) {
 export function registerAuth(app, { smsProvider = createSmsProvider(), googleClientFactory = () => new OAuth2Client(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, process.env.GOOGLE_CALLBACK_URL) } = {}) {
   const limit = rateLimit({ windowMs: 15 * 60_000, limit: 40, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'Too many login attempts. Try again later.' } });
   app.use('/api/auth', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
-  app.get('/api/auth/config', (req, res) => res.json({ devOtp, devGoogle, development: !production,
-    smsReady: devOtp || smsProvider.configured(), googleReady: devGoogle || googleConfiguration().ready,
-    mobileVerified: hasVerifiedMobile(req),
-  }));
+  app.get('/api/auth/config', async (req, res) => {
+    const google = googleConfiguration();
+    const requestOrigin = `${req.protocol}://${req.get('host')}`;
+    const challenge = req.session.challengeId ? await prisma.otpVerification.findUnique({ where: { id: req.session.challengeId } }) : null;
+    const pending = challenge && !challenge.verified && challenge.deliveryStatus === 'sent' && challenge.attempts < 5 &&
+      challenge.expiresAt > new Date() && challenge.provider === (devOtp ? 'demo' : 'twilio-verify');
+    res.json({ devOtp, devGoogle, development: !production,
+      smsReady: devOtp || smsProvider.configured(), googleReady: devGoogle || (google.ready && requestOrigin === google.origin),
+      mobileVerified: hasVerifiedMobile(req),
+      // Return only this browser's pending challenge metadata, never the OTP or provider ID.
+      pendingOtp: pending ? { mobileNumber: challenge.mobileNumber, expiresAt: challenge.expiresAt, resendAt: new Date(challenge.createdAt.getTime() + 60000) } : null,
+    });
+  });
   app.post('/api/auth/send-otp', limit, async (req, res) => {
     const mobileNumber = phoneSchema.parse(req.body?.mobileNumber);
     if (!devOtp && !smsProvider.configured()) throw fail(503, 'SMS sign-in is not configured yet. Contact the app owner.');
