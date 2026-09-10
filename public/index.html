@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="./reference.css" />
   <link rel="stylesheet" href="./assistant.css" />
+  <link rel="stylesheet" href="./tracking.css" />
 </head>
 <body>
   <div class="app-shell">
@@ -35,6 +36,67 @@
     </header>
 
     <main>
+      <section class="tracking-section" id="tracking">
+        <div class="tracking-intro"><div><span class="eyebrow">YOUR JOURNEY, IN MOTION</span><h1>Track your train. Every stop.</h1><p>Search 1,209 demo trains across India. Follow movement, station stops and arrival times.</p></div><span class="demo-disclosure">SIMULATION &middot; Illustrative routes, not live GPS</span></div>
+        <div class="fleet-searchbar"><label for="fleetQuery">Find a train</label><input id="fleetQuery" type="search" placeholder="Train number, name or city - try 70000" autocomplete="off"><select id="fleetType" aria-label="Train type"><option value="all">All trains</option><option value="normal">Normal</option><option value="tourism">Tourism</option></select><button id="fleetToggle" class="secondary-button" aria-expanded="false">Browse trains</button></div>
+        <div id="fleetDirectory" hidden><div class="fleet-meta"><span id="fleetCount" role="status">Loading trains...</span><div><button id="fleetPrev" aria-label="Previous trains">&larr;</button><button id="fleetNext" aria-label="Next trains">&rarr;</button></div></div><div id="fleetResults" class="fleet-results"></div></div>
+        <div class="tracking-titlebar">
+          <div>
+            <span class="live-badge"><i></i> SIMULATED LIVE TRACKING</span>
+            <h2 id="trackingTrainName">Select a train to start tracking</h2>
+            <p id="trackingRouteText">Live movement, speed, next station and ETA appear here.</p>
+          </div>
+          <div class="tracking-actions">
+            <span class="connection-badge" id="connectionBadge">● Waiting</span>
+            <button class="secondary-button dark" id="recenterBtn">◎ Recenter train</button>
+            <button class="secondary-button dark" id="followTrain" aria-pressed="false">Follow train</button>
+            <button class="secondary-button dark" id="fitRoute">Full route</button>
+            <button class="secondary-button dark" id="expandMap" aria-pressed="false">Expand map</button>
+          </div>
+        </div>
+
+        <div class="tracking-layout">
+          <div class="map-column">
+            <div class="map-card">
+              <div id="map" role="application" aria-label="Live train tracking map"></div>
+              <div class="map-topbar"><span id="mapSection">Route not selected</span><span>Updated <b id="updatedAgo">—</b></span></div>
+              <div class="map-legend"><span><i class="legend-line"></i> Route</span><span>● Station</span><span>🚆 Live train</span></div>
+            </div>
+            <div class="station-progress-card">
+              <div class="card-heading"><div><span class="eyebrow">ROUTE PROGRESS</span><h3>Station timeline</h3></div><b id="routePercent">0%</b></div>
+              <div class="route-progress"><div id="routeProgressFill"></div></div>
+              <div class="station-timeline" id="stationTimeline"><p class="empty-note">Select a train to load its route.</p></div>
+            </div>
+          </div>
+
+          <aside class="telemetry-column">
+            <div class="telemetry-grid">
+              <article class="metric-card speed-metric"><span>Current speed</span><strong><b id="speedValue">0</b><small> km/h</small></strong><div class="speed-bar"><i id="speedBar"></i></div></article>
+              <article class="metric-card"><span>Distance left</span><strong><b id="distanceValue">—</b><small> km</small></strong><small id="currentSection">Waiting for train</small></article>
+              <article class="metric-card"><span>Arrival in</span><strong><b id="etaValue">—</b><small> min</small></strong><small id="arrivalClock">ETA unavailable</small></article>
+              <article class="metric-card"><span>Running status</span><strong class="status-text" id="runningStatus">Waiting</strong><small>Platform <b id="platformValue">—</b></small></article>
+            </div>
+
+            <article class="next-station-card">
+              <span class="eyebrow">NEXT STATION</span>
+              <h3 id="nextStation">—</h3>
+              <p id="nextArrival">Waiting for telemetry</p><p id="motionStatus"></p>
+              <div class="next-meta"><span>Delay <b id="delayValue">—</b></span><span>Previous <b id="previousStation">—</b></span></div>
+            </article>
+
+            <article class="weather-panel" id="weather">
+              <div class="weather-current">
+                <div><span class="eyebrow">WEATHER EN ROUTE</span><h3 id="weatherPlace">Current train location</h3></div>
+                <div class="temperature"><span id="weatherIcon">⛅</span><b><span id="tempValue">—</span>°C</b></div>
+              </div>
+              <div class="weather-detail"><span id="weatherLabel">Waiting for location</span><span>Feels <b id="feelsValue">—</b></span><span>Wind <b id="windValue">—</b></span><span>Rain <b id="rainValue">—</b></span></div>
+              <div class="forecast-row" id="forecastRow"></div>
+            </article>
+
+            <button class="primary-button tracking-primary" id="notifyBtn">🔔 Enable trip alerts</button>
+          </aside>
+        </div>
+      </section>
       <section class="hero" id="home">
         <div class="hero-shade"></div>
         <div class="hero-copy">
@@ -99,60 +161,7 @@
         </div>
       </section>
 
-      <section class="tracking-section" id="tracking">
-        <div class="tracking-titlebar">
-          <div>
-            <span class="live-badge"><i></i> LIVE TRACKING</span>
-            <h2 id="trackingTrainName">Select a train to start tracking</h2>
-            <p id="trackingRouteText">Live movement, speed, next station and ETA appear here.</p>
-          </div>
-          <div class="tracking-actions">
-            <span class="connection-badge" id="connectionBadge">● Waiting</span>
-            <button class="secondary-button dark" id="recenterBtn">◎ Recenter train</button>
-          </div>
-        </div>
 
-        <div class="tracking-layout">
-          <div class="map-column">
-            <div class="map-card">
-              <div id="map" role="application" aria-label="Live train tracking map"></div>
-              <div class="map-topbar"><span id="mapSection">Route not selected</span><span>Updated <b id="updatedAgo">—</b></span></div>
-              <div class="map-legend"><span><i class="legend-line"></i> Route</span><span>● Station</span><span>🚆 Live train</span></div>
-            </div>
-            <div class="station-progress-card">
-              <div class="card-heading"><div><span class="eyebrow">ROUTE PROGRESS</span><h3>Station timeline</h3></div><b id="routePercent">0%</b></div>
-              <div class="route-progress"><div id="routeProgressFill"></div></div>
-              <div class="station-timeline" id="stationTimeline"><p class="empty-note">Select a train to load its route.</p></div>
-            </div>
-          </div>
-
-          <aside class="telemetry-column">
-            <div class="telemetry-grid">
-              <article class="metric-card speed-metric"><span>Current speed</span><strong><b id="speedValue">0</b><small> km/h</small></strong><div class="speed-bar"><i id="speedBar"></i></div></article>
-              <article class="metric-card"><span>Distance left</span><strong><b id="distanceValue">—</b><small> km</small></strong><small id="currentSection">Waiting for train</small></article>
-              <article class="metric-card"><span>Arrival in</span><strong><b id="etaValue">—</b><small> min</small></strong><small id="arrivalClock">ETA unavailable</small></article>
-              <article class="metric-card"><span>Running status</span><strong class="status-text" id="runningStatus">Waiting</strong><small>Platform <b id="platformValue">—</b></small></article>
-            </div>
-
-            <article class="next-station-card">
-              <span class="eyebrow">NEXT STATION</span>
-              <h3 id="nextStation">—</h3>
-              <div class="next-meta"><span>Delay <b id="delayValue">—</b></span><span>Previous <b id="previousStation">—</b></span></div>
-            </article>
-
-            <article class="weather-panel" id="weather">
-              <div class="weather-current">
-                <div><span class="eyebrow">WEATHER EN ROUTE</span><h3 id="weatherPlace">Current train location</h3></div>
-                <div class="temperature"><span id="weatherIcon">⛅</span><b><span id="tempValue">—</span>°C</b></div>
-              </div>
-              <div class="weather-detail"><span id="weatherLabel">Waiting for location</span><span>Feels <b id="feelsValue">—</b></span><span>Wind <b id="windValue">—</b></span><span>Rain <b id="rainValue">—</b></span></div>
-              <div class="forecast-row" id="forecastRow"></div>
-            </article>
-
-            <button class="primary-button tracking-primary" id="notifyBtn">🔔 Enable trip alerts</button>
-          </aside>
-        </div>
-      </section>
 
       <section class="section" id="tourism">
         <div class="section-heading">
@@ -195,6 +204,7 @@
   <script src="./config.js"></script>
   <script src="./api-client.js"></script>
   <script src="./app.js"></script>
+  <script src="./tracking-ui.js"></script>
   <script src="./design.js"></script>
   <script src="./assistant.js"></script>
 </body>

@@ -1,3 +1,4 @@
+import { searchFleet } from './shared/fleet-search.js';
 import { stations, trains, touristSpots } from './shared/catalog.js';
 import { getLiveState } from './shared/tracking.js';
 import { getWeatherData } from './shared/weather.js';
@@ -64,6 +65,7 @@ export async function requestDemo(path, options = {}) {
   if (method !== 'GET') throw new Error('Unsupported request method');
   if (route === '/api/health') return { ok: true, service: 'live-train', mode: 'browser-demo' };
   if (route === '/api/stations') { const q = (params.get('q') || '').toLowerCase(); return stations.filter(s => `${s.name} ${s.code} ${s.city}`.toLowerCase().includes(q)); }
+  if (route === '/api/trains/catalog') return searchFleet(params);
   if (route === '/api/trains/search') {
     const from = params.get('from'), to = params.get('to'), type = params.get('type') || 'all', travelClass = params.get('class');
     if (!stations.some(s => s.code === from) || !stations.some(s => s.code === to) || from === to) throw new Error('Choose valid, different departure and arrival stations');

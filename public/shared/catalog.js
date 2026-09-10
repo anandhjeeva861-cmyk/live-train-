@@ -1,3 +1,4 @@
+import { expandCatalog } from './mock-fleet.js';
 export const stations = [
   { code: 'MAS', name: 'MGR Chennai Central', city: 'Chennai', lat: 13.0827, lng: 80.2707 },
   { code: 'KPD', name: 'Katpadi Junction', city: 'Vellore', lat: 12.9692, lng: 79.1453 },
@@ -75,6 +76,8 @@ export const trains = [
     route: route('MAS', 'TPJ', 'MDU')
   }
 ];
+
+expandCatalog(stations, trains);
 
 export const touristSpots = [
   { id: 1, city: 'Chennai', name: 'Marina Beach', distanceKm: 4.2, category: 'Beach', rating: 4.6, lat: 13.0500, lng: 80.2824, image: 'https://images.unsplash.com/photo-1593693397690-362cb9666fc2?auto=format&fit=crop&w=1000&q=80' },

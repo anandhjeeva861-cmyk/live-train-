@@ -1,3 +1,4 @@
+import { searchFleet } from './public/shared/fleet-search.js';
 import express from 'express';
 import path from 'path';
 import fs from 'fs/promises';
@@ -69,6 +70,8 @@ app.get('/api/stations', (req, res) => {
     : stations;
   res.json(result);
 });
+
+app.get('/api/trains/catalog', (req, res) => res.json(searchFleet(new URL(req.originalUrl, 'http://localhost').searchParams)));
 
 app.get('/api/trains/search', (req, res) => {
   const from = String(req.query.from || '').trim().toUpperCase();

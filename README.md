@@ -27,6 +27,18 @@ This is the upgraded version of the earlier RailVista starter. It keeps the simp
 
 ## Run
 
+### Tracking workspace and 1,209-train mock fleet
+
+The opening screen is now the tracking workspace, with a large interactive map. Search by train number, name or city, or choose **Browse trains** for paginated results and normal/tourism filters. Try `70000`, `71000`, `Mumbai` or `12639`. **Follow train** follows the moving marker; dragging the map stops following. **Full route** fits every station, and **Expand map** opens a larger workspace (Escape exits).
+
+The catalog includes the original 9 services plus 1,200 deterministic synthetic services (`70000`–`71199`) across 36 stations and 20 directional corridor variants. Each has a unique ID/number, route, sample fares, availability and booking metadata. The complete portable dataset is in `data/train-fleet.json`; regenerate it with `npm run export:mock`. Both Express and GitHub Pages use the shared catalog. `GET /api/trains/catalog?q=Mumbai&type=all&offset=0&limit=8` searches it (maximum 50 results per page).
+
+Tracking uses a deterministic, repeating simulation clock, distance-based movement, station dwell periods, destination arrival holds, per-stop IST arrival/departure times and stable ETAs. The map interpolates between two-second updates, shows travelled/remaining route sections and reports stale telemetry. Trip alerts show in-app station-change messages while the page is open. The catalog's sample booking timetable is separate from this continuously repeating demonstration clock.
+
+**All train telemetry is simulated, including the original named services.** Routes are illustrative straight segments between station coordinates, not surveyed railway geometry or Google Maps directions. The map uses Leaflet/OpenStreetMap; CDN assets and map tiles need internet access. Real GPS tracking requires an authorized railway data provider. Delay/platform values are synthetic. No API key is needed for this demo.
+
+`npm test` includes checks for all 1,209 trains, unique IDs/numbers, route validity, movement speed, dwell/arrival boundaries, stable ETAs and pagination. Both browser suites exercise train switching, continuous telemetry, map controls and search. The Pages suite also checks mobile widths.
+
 ```bash
 npm install
 npm run dev

@@ -174,7 +174,6 @@ function seatGridHtml(train) {
 function openBooking(id) {
   const train = state.trains.find(t => t.id === id) || (state.selectedTrain?.id === id ? state.selectedTrain : null);
   if (!train) return;
-  state.selectedTrain = train;
   state.selectedSeat = null;
 
   const preferred = $('#travelClass').value;
@@ -257,7 +256,7 @@ function setupMap() {
     $('#map').innerHTML = '<div class="empty-card">Map library could not load. Check internet access for the Leaflet CDN.</div>';
     return;
   }
-  state.map = L.map('map', { zoomControl: true, scrollWheelZoom: false }).setView([12.3, 78.2], 7);
+  state.map = L.map('map', { zoomControl: true, scrollWheelZoom: true }).setView([12.3, 78.2], 7);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '© OpenStreetMap contributors'
@@ -277,11 +276,13 @@ function trainIcon(bearing = 0) {
 
 function drawRoute(train) {
   if (!state.map || !window.L) return;
+  cancelAnimationFrame(state.markerAnimation);
   state.routeLayer.clearLayers();
   state.poiLayer.clearLayers();
   state.trainMarker = null;
   const coordinates = train.route.map(point => [point.lat, point.lng]);
-  L.polyline(coordinates, { color: '#1268e8', weight: 5, opacity: .9 }).addTo(state.routeLayer);
+  L.polyline(coordinates, { color: '#1268e8', weight: 6, opacity: .9 }).addTo(state.routeLayer);
+  state.travelledLayer = L.polyline([], { color: '#77899c', weight: 6, opacity: .95 }).addTo(state.routeLayer);
   L.polyline(coordinates, { color: '#9ed0ff', weight: 10, opacity: .2 }).addTo(state.routeLayer);
   train.route.forEach((point, index) => {
     L.circleMarker([point.lat, point.lng], {
@@ -297,7 +298,8 @@ function renderStationTimeline(train, live = null) {
   const nextIndex = live ? train.route.findIndex(point => point.code === live.nextStationCode) : -1;
   $('#stationTimeline').innerHTML = train.route.map((point, index) => {
     const cls = nextIndex === -1 ? '' : index < nextIndex ? 'done' : index === nextIndex ? 'active' : '';
-    const label = index === 0 ? 'Origin' : index === train.route.length - 1 ? 'Destination' : 'Stop';
+    const stop = live?.stops?.[index];
+    const label = stop ? `${stop.status === 'departed' ? 'Departed' : stop.status === 'at-station' ? 'At station' : 'Expected'} \u00b7 ${new Date(stop.arrivalAt).toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', timeZone:'Asia/Kolkata'})} IST` : index === 0 ? 'Origin' : index === train.route.length - 1 ? 'Destination' : 'Stop';
     return `<div class="station-node ${cls}"><b>${escapeHtml(point.code)} · ${escapeHtml(point.city || point.name)}</b><small>${label}</small></div>`;
   }).join('');
 }
@@ -307,6 +309,7 @@ function closeLiveConnection() {
     state.eventSource.close();
     state.eventSource = null;
   }
+  cancelAnimationFrame(state.markerAnimation);
   clearInterval(state.pollingTimer);
   state.pollingTimer = null;
 }
@@ -315,6 +318,7 @@ async function selectTrackingTrain(train) {
   closeLiveConnection();
   state.selectedTrain = train;
   state.lastLive = null;
+  document.dispatchEvent(new CustomEvent('train-selected', { detail: train }));
   state.lastWeatherAt = 0;
   $('#trackingTrainName').textContent = `${train.number} · ${train.name}`;
   $('#trackingRouteText').textContent = `${train.from.name} → ${train.to.name}`;
@@ -376,7 +380,12 @@ function formatArrival(iso) {
 
 function applyLiveState(live) {
   if (!state.selectedTrain || live.trainId !== state.selectedTrain.id) return;
+  $('#connectionBadge').textContent = LiveTrainAPI.isStatic ? '● Browser simulation' : '● Simulation stream';
+  $('#connectionBadge').className = 'connection-badge online';
+  const previousLive = state.lastLive;
   state.lastLive = live;
+  if (state.alertsEnabled && previousLive && previousLive.nextStationCode !== live.nextStationCode) showToast(`Station update: ${live.previousStation}`);
+  document.dispatchEvent(new CustomEvent('train-telemetry', { detail: live }));
   $('#speedValue').textContent = live.speedKmph;
   $('#speedBar').style.width = `${Math.min(100, Math.round((live.speedKmph / 130) * 100))}%`;
   $('#distanceValue').textContent = live.distanceRemainingKm;
@@ -400,10 +409,15 @@ function applyLiveState(live) {
     if (!state.trainMarker) {
       state.trainMarker = L.marker(latLng, { icon: trainIcon(live.bearing), zIndexOffset: 1000 }).addTo(state.routeLayer);
     } else {
-      state.trainMarker.setLatLng(latLng);
+      animateTrainMarker(latLng, live);
       state.trainMarker.setIcon(trainIcon(live.bearing));
     }
     state.trainMarker.bindTooltip(`${escapeHtml(live.trainNo)} · ${live.speedKmph} km/h`, { className: 'route-tooltip', direction: 'top' });
+  }
+
+  if (state.travelledLayer) {
+    const leg = state.selectedTrain.route.findIndex(p => p.code === live.nextStationCode);
+    state.travelledLayer.setLatLngs([...state.selectedTrain.route.slice(0, leg).map(p => [p.lat, p.lng]), [live.lat, live.lng]]);
   }
 
   if (Date.now() - state.lastWeatherAt > 60_000) {
@@ -600,3 +614,18 @@ function bindEvents() {
   bindEvents();
   await Promise.all([searchTrains(), loadBookings()]);
 })();
+
+function animateTrainMarker(target, live) {
+  cancelAnimationFrame(state.markerAnimation);
+  const marker = state.trainMarker, start = marker.getLatLng(), began = performance.now();
+  const jump = Math.abs(start.lat - target[0]) + Math.abs(start.lng - target[1]) > 0.2;
+  const duration = jump || matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1900;
+  function frame(now) {
+    if (marker !== state.trainMarker) return;
+    const fraction = duration ? Math.min(1, (now - began) / duration) : 1;
+    marker.setLatLng([start.lat + (target[0] - start.lat) * fraction, start.lng + (target[1] - start.lng) * fraction]);
+    if (fraction < 1) state.markerAnimation = requestAnimationFrame(frame);
+    else if (state.followTrain) state.map.panTo(target, {animate: true, duration: 0.5});
+  }
+  state.markerAnimation = requestAnimationFrame(frame);
+}

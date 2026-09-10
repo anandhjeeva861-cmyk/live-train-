@@ -1,3 +1,4 @@
+import { checkTracking } from './tracking-browser-checks.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -31,6 +32,7 @@ test('voice assistant: app actions, speech lifecycle, errors and responsive UI',
     });
     await page.goto(base, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.querySelectorAll('.train-card').length > 0);
+    await checkTracking(page);
     await page.locator('#assistantLaunch').click();
     await page.waitForFunction(() => document.getElementById('assistantMode').textContent.includes('Basic commands'));
     const send = async text => {

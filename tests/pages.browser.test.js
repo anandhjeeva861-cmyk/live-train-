@@ -1,3 +1,4 @@
+import { checkTracking } from './tracking-browser-checks.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
@@ -25,6 +26,7 @@ test('GitHub Pages works under a repository path with no backend', { timeout: 90
     page.on('request', r => { if (r.url().startsWith(origin) && new URL(r.url()).pathname.startsWith('/api/')) apiCalls.push(r.url()); });
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.querySelectorAll('.train-card').length === 2);
+    await checkTracking(page);
     assert.match(await page.title(), /^Live Train/);
     assert.match(await page.locator('.hosting-note').innerText(), /Bookings stay on this device/);
     assert.equal(await page.locator('body').evaluate(e => getComputedStyle(e).margin), '0px');
