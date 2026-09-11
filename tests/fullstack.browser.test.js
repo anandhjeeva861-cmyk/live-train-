@@ -124,7 +124,7 @@ test('login, checkout, reload/restart persistence, tracking and responsive front
     await page.getByRole('button', { name: 'Retry connection' }).waitFor();
     await page.unroute('**/api/auth/config');
     await page.getByRole('button', { name: 'Retry connection' }).click();
-    await page.locator('#authPhone').waitFor();
+    await page.waitForFunction(() => document.querySelector('#phoneForm button')?.disabled === false);
     assert.equal(await page.locator('#phoneForm button').isEnabled(), true);
     assert.deepEqual(errors, []);
   } finally { await browser?.close(); await stop(); }
