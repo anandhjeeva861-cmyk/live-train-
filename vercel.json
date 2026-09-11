@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "node scripts/stage-pages.js",
+  "outputDirectory": "dist/pages",
+  "rewrites": [
+    { "source": "/login", "destination": "/index.html" },
+    { "source": "/dashboard", "destination": "/index.html" },
+    { "source": "/book", "destination": "/index.html" },
+    { "source": "/bookings", "destination": "/index.html" },
+    { "source": "/tracking", "destination": "/index.html" }
+  ]
+}

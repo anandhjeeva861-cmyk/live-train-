@@ -132,3 +132,23 @@ Changed files: backend/auth.js, public/auth.js, prisma/schema.prisma, .env.examp
 Executed validation: Prisma migration and generation succeeded; npm run dev applied both committed migrations and seeded 36 stations, 1,209 trains and 12 tourist spots. npm test passed 37 tests, including controlled Twilio/Google responses; npm run test:fullstack passed the browser login/booking/reload/server-restart/tracking/responsive regression. Syntax checks passed for 40 JavaScript files. Live localhost:4174 health reported database connected. A separate real-mode browser check at width 390 verified the setup message, disabled unconfigured SMS submission, absence of demo OTP, no horizontal overflow and no page errors. Source and reachable-history secret checks passed. git diff reviewed and whitespace checks passed.
 
 Remaining external setup: npm run auth:check correctly reports three missing Twilio credentials and two missing Google credentials. Actual SMS delivery and interactive Google login could not be exercised without the user's accounts. AUTH_SETUP.md lists the exact steps and localhost:4174 callback URI. Automated provider tests send no SMS and do not prove live account access. The server runs in real-auth mode; login remains unavailable until valid provider configuration is supplied and the server restarted.
+
+## Login and hosting audit follow-up (2026-09-11)
+
+User request: recheck SMS/Google login, audit project bugs and publish fixes to GitHub.
+
+Verified root causes: the ignored local .env still has no TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_VERIFY_SERVICE_SID, GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET. The public GitHub Pages site is a browser demo, not a running Express backend. The repository-linked Vercel homepage, /api/health and /api/auth/config returned HTTP 500 FUNCTION_INVOCATION_FAILED. Vercel function logs were unavailable, so the exact previous crash is unconfirmed; persistent local SQLite is incompatible with that deployment model.
+
+Bugs fixed:
+- Login refresh/reopen lost OTP or verified Google progress. The session-bound config endpoint now resumes unexpired challenges without exposing OTPs/provider IDs. A different browser receives no challenge metadata.
+- A configuration network failure looked like missing provider credentials and offered no recovery. Login now distinguishes the outage and provides Retry connection.
+- Protected HTML checked only userId, allowing deleted accounts or obsolete development sessions to open protected pages. Pages now use the same database-backed authentication guard as APIs.
+- A cross-origin apiBase attempted credentialed OTP calls that conflicted with same-site cookies and origin protection. The browser now opens the configured backend's own frontend/login, retaining one origin through Google callbacks.
+- Late telemetry could replace newer positions for the same train. Older timestamps are ignored; switching trains also clears cached tourist spots.
+- Partial weather responses fabricated apparent temperature/wind/forecast values, and expired hourly data could be presented as future forecasts. Missing values display unavailable, and past forecast data is not reused.
+
+Hosting changes: GitHub CI runs backend and browser checks; optional manual Pages workflow stages only browser assets. Existing branch Pages publishing is preserved. render.yaml prepares an optional paid persistent-disk Node deployment, without provisioning it. vercel.json builds the existing labelled static preview to avoid serverless SQLite invocation; it does not activate real authentication. DEPLOYMENT.md explains both hosting modes and credential requirements. Local/hosted providers, secrets and database files remain outside Git.
+
+Validation: 38 backend tests passed, including real-provider mocked contracts and deleted-user page guards. Full-stack browser checks passed OTP reload, Google modal reopen, configuration outage retry, bookings/restart persistence, SSE cleanup, stale telemetry rejection, partial weather and responsive widths 360/390/768/1024. Local health reports connected, and both committed migrations are applied. npm audit reports zero vulnerabilities. Actual SMS delivery and interactive Google login remain untested because accounts/credentials are absent. No paid service or provider account was created.
+
+Reviewed modules: Express/security/session routing, auth/SMS, catalog, booking/inventory, tracking/SSE, database schema/seed/migrations, shared weather/tracking/assistant modules, frontend API/auth/booking/map/tourism/dashboard flows, styles and static build. Findings and tests are bounded evidence, not a claim that every possible bug has been eliminated.

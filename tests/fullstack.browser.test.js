@@ -89,6 +89,17 @@ test('login, checkout, reload/restart persistence, tracking and responsive front
     await page.waitForFunction(() => state.lastLive?.trainNo === 'TR101');
     assert.equal(await page.evaluate(() => window.__streams.filter(s => s.readyState !== 2).length), 1);
     await page.waitForFunction(() => state.poiLayer.getLayers().length === 4);
+    assert.equal(await page.evaluate(() => {
+      const before = state.lastLive.updatedAt;
+      applyLiveState({ ...state.lastLive, updatedAt: '2000-01-01T00:00:00Z', speedKmph: 999 });
+      return state.lastLive.updatedAt === before;
+    }), true, 'Late telemetry must not overwrite current position');
+    await page.route('**/api/weather?*', route => route.fulfill({ json: { current: { temperature_2m: 28, time: '2099-01-01T12:00' }, hourly: { time: ['2099-01-01T10:00'], temperature_2m: [20] } } }));
+    await page.evaluate(() => loadWeather(state.lastLive.lat, state.lastLive.lng));
+    assert.equal(await page.locator('#feelsValue').innerText(), '—');
+    assert.equal(await page.locator('#windValue').innerText(), '—');
+    assert.ok(!(await page.locator('#forecastRow').innerText()).includes('20°'), 'Past forecasts must not be reused as future weather');
+    await page.unroute('**/api/weather?*');
     await page.locator('#toStation').selectOption('SBC');
     await page.evaluate(() => loadSpots());
     await page.waitForFunction(() => document.querySelectorAll('.spot-card').length === 4);
@@ -108,6 +119,13 @@ test('login, checkout, reload/restart persistence, tracking and responsive front
     await page.locator('#mobileProfile').click();
     await Promise.all([page.waitForURL('**/login'), page.locator('#logoutBtn').click()]);
     assert.equal((await page.request.get(`${base}/api/bookings`)).status(), 401);
+    await page.route('**/api/auth/config', route => route.fulfill({ status: 503, json: { error: 'Test outage' } }));
+    await page.reload();
+    await page.getByRole('button', { name: 'Retry connection' }).waitFor();
+    await page.unroute('**/api/auth/config');
+    await page.getByRole('button', { name: 'Retry connection' }).click();
+    await page.locator('#authPhone').waitFor();
+    assert.equal(await page.locator('#phoneForm button').isEnabled(), true);
     assert.deepEqual(errors, []);
   } finally { await browser?.close(); await stop(); }
 });

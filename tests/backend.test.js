@@ -148,5 +148,10 @@ test('RailGo database and API integration', { timeout: 180000 }, async t => {
       assert.equal((await a('/api/auth/me')).status, 401);
       assert.equal((await a('/api/bookings')).status, 401);
     });
+    await t.test('deleted account cannot open protected HTML with an old session', async () => {
+      await prisma.user.delete({ where: { mobileNumber: '9876543211' } });
+      assert.equal((await b('/dashboard')).headers.get('location'), '/login');
+      assert.equal((await b('/api/bookings')).status, 401);
+    });
   } finally { closeStreams(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); await prisma.$disconnect(); }
 });

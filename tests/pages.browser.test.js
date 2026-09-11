@@ -5,10 +5,11 @@ import express from 'express';
 import { chromium } from 'playwright';
 import { existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import '../scripts/stage-pages.js';
 
 test('GitHub Pages works under a repository path with no backend', { timeout: 90000 }, async () => {
   const app = express();
-  const root = fileURLToPath(new URL('../', import.meta.url));
+  const root = fileURLToPath(new URL('../dist/pages/', import.meta.url));
   app.use('/live-train-', express.static(root));
   app.use((_req, res) => res.status(404).send('No backend on this static host'));
   const server = app.listen(0, '127.0.0.1');

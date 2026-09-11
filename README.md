@@ -2,6 +2,8 @@
 
 The existing Vande Bharat dashboard, HTML/CSS/JavaScript frontend, Leaflet maps, Tamil/English voice assistant and GitHub Pages demo are preserved. Express now serves Prisma/SQLite application data, server-side authentication and transactional demo bookings.
 
+For GitHub Pages, Vercel and persistent backend hosting, see [DEPLOYMENT.md](DEPLOYMENT.md). Publishing source code alone does not configure SMS/Google credentials or start a database server.
+
 ## Run locally
 
 Requires Node.js **22.12+** (tested on Node 24) and npm. No PostgreSQL installation is needed. Real login requires Twilio Verify and Google OAuth credentials: follow [AUTH_SETUP.md](AUTH_SETUP.md), then run `npm run auth:check`. Real authentication is now the default; missing credentials show a setup message without silently using demo login.
@@ -110,7 +112,7 @@ The existing **Ask Live Train** panel supports Tamil, English and Tanglish comma
 
 Basic commands work without an AI key. Optionally configure `OPENAI_API_KEY` and `OPENAI_MODEL` in local `.env` for the existing server-side AI integration. Never put credentials in `public/config.js`. Live application answers use database catalog records. The assistant does not perform booking, cancellation or payment mutations.
 
-GitHub Pages remains a **separate browser-only demo**, with localStorage tickets and simulated tracking. It cannot run Express, SQLite, real authentication or private AI calls. Run `npm run build:pages` after modifying `public/index.html`; the root `index.html` is generated. The hosted backend URL is configured in one place, `public/config.js` (`apiBase`); cookies and SSE use that same API client. Cross-site cookie deployment requires an intentional authentication/cookie policy review; local same-origin hosting is the verified configuration.
+GitHub Pages remains a **separate browser-only demo**, with localStorage tickets and simulated tracking. It cannot run Express, SQLite, real authentication or private AI calls. Run `npm run build:pages` after modifying `public/index.html`; the root `index.html` is generated. The hosted backend origin is configured in one place, `public/config.js` (`apiBase`). When it points to another origin, the browser opens that server's `/login` and uses its frontend, API and session cookies together. This avoids depending on third-party cookies for OTP and Google callbacks.
 
 ## Tests
 

@@ -58,6 +58,8 @@ Open `/login`, enter your mobile, use the code received by SMS, and choose **Con
 
 Missing credentials show setup-unavailable messages. OAuth cancellation, wrong host, expired mobile verification, account conflicts and invalid state return to the login UI instead of a raw JSON error page. A failed Google attempt can be retried while the mobile verification is still valid.
 
+Refreshing the page or reopening the login modal resumes the current browser's unexpired OTP challenge or verified Google step. A failed configuration request shows a connection retry instead of incorrectly reporting missing provider setup. For a GitHub/Vercel deployment, follow [DEPLOYMENT.md](DEPLOYMENT.md); real login needs the running Express service and its persistent database.
+
 ## Testing limits
 
 Automated tests mock the Twilio transport and Google's token exchange. They verify provider requests, wrong/expired codes, failed sends, attempt limits, OAuth state/PKCE, callback replay, demo-profile upgrades and ownership conflicts. They do **not** prove SMS delivery or real Google account access. Those final checks require your configured accounts and an interactive sign-in. No SMS was sent or provider account created automatically.
