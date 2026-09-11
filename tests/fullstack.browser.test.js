@@ -5,10 +5,11 @@ import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { databaseEnvironment } from './helpers.js';
 
-test('login, checkout, reload/restart persistence, tracking and responsive frontend', { timeout: 180000 }, async () => {
+test('login, checkout, reload/restart persistence, tracking and responsive frontend', { timeout: 180000 }, async t => {
   const env = { ...databaseEnvironment('fullstack-browser'), PORT: '4189' };
   const base = 'http://127.0.0.1:4189';
-  let child, browser;
+  let child, browser, page;
+  t.signal.addEventListener('abort', () => { child?.kill('SIGKILL'); browser?.close().catch(() => {}); }, { once: true });
   async function start() {
     child = spawn(process.execPath, ['server.js'], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     await new Promise((resolve, reject) => {
@@ -17,12 +18,23 @@ test('login, checkout, reload/restart persistence, tracking and responsive front
       child.once('exit', code => { clearTimeout(timer); reject(new Error(`Server exited: ${code}`)); });
     });
   }
-  async function stop() { if (child && child.exitCode === null) { const exited = new Promise(resolve => child.once('exit', resolve)); child.kill(); await exited; } }
+  async function stop() {
+    const process = child;
+    if (!process || process.exitCode !== null || process.signalCode !== null) return;
+    let forced = false;
+    const exited = new Promise(resolve => process.once('exit', resolve));
+    const deadline = setTimeout(() => { forced = true; process.kill('SIGKILL'); }, 10000);
+    process.kill();
+    try { await exited; } finally { clearTimeout(deadline); }
+    assert.equal(forced, false, 'Server must shut down within ten seconds');
+  }
   try {
     await start();
     const executablePath = process.env.BROWSER_PATH || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
     browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    page.setDefaultTimeout(15000);
+    page.setDefaultNavigationTimeout(20000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(() => {
@@ -51,6 +63,7 @@ test('login, checkout, reload/restart persistence, tracking and responsive front
     assert.match(await page.locator('#authModal').innerText(), /DEVELOPMENT LOGIN/);
     await Promise.all([page.waitForURL('**/dashboard'), page.locator('#googleLogin').click()]);
     await page.waitForFunction(() => RailGoAuth.user && document.querySelectorAll('.train-card').length === 2);
+    console.log('Browser check: OTP reload and Google reopen completed.');
     await page.locator('#passengers').selectOption('2');
     await page.locator('[data-book]').first().click();
     await page.waitForSelector('.seat-button:not(.booked)');
@@ -68,6 +81,7 @@ test('login, checkout, reload/restart persistence, tracking and responsive front
     await stop(); await start();
     await page.reload();
     await page.waitForFunction(pnr => RailGoAuth.user && document.querySelector('#bookingList').textContent.includes(pnr), pnr);
+    console.log('Browser check: booking survived server restart.');
     await page.locator('#upcomingJourneys [data-ticket]').click();
     assert.match(await page.locator('#modalBody').innerText(), new RegExp(pnr));
     await page.locator('#modalClose').click();
@@ -100,6 +114,7 @@ test('login, checkout, reload/restart persistence, tracking and responsive front
     assert.equal(await page.locator('#windValue').innerText(), '—');
     assert.ok(!(await page.locator('#forecastRow').innerText()).includes('20°'), 'Past forecasts must not be reused as future weather');
     await page.unroute('**/api/weather?*');
+    console.log('Browser check: tracking streams and weather completed.');
     await page.locator('#toStation').selectOption('SBC');
     await page.evaluate(() => loadSpots());
     await page.waitForFunction(() => document.querySelectorAll('.spot-card').length === 4);
@@ -120,6 +135,7 @@ test('login, checkout, reload/restart persistence, tracking and responsive front
     await Promise.all([page.waitForURL('**/login'), page.locator('#logoutBtn').click()]);
     assert.equal((await page.request.get(`${base}/api/bookings`)).status(), 401);
     await page.route('**/api/auth/config', route => route.fulfill({ status: 503, json: { error: 'Test outage' } }));
+    console.log('Browser check: testing login configuration outage recovery.');
     await page.reload();
     await page.getByRole('button', { name: 'Retry connection' }).waitFor();
     await page.unroute('**/api/auth/config');
@@ -127,5 +143,14 @@ test('login, checkout, reload/restart persistence, tracking and responsive front
     await page.waitForFunction(() => document.querySelector('#phoneForm button')?.disabled === false);
     assert.equal(await page.locator('#phoneForm button').isEnabled(), true);
     assert.deepEqual(errors, []);
-  } finally { await browser?.close(); await stop(); }
+  } catch (error) {
+    console.error('Browser failure state:', await page?.evaluate(() => ({
+      path: location.pathname, configError: RailGoAuth.configError,
+      smsReady: RailGoAuth.config.smsReady, devOtp: RailGoAuth.config.devOtp,
+      loginVisible: !document.getElementById('authModal')?.hidden,
+      phoneSubmitDisabled: document.querySelector('#phoneForm button')?.disabled,
+    })).catch(() => 'Page unavailable'));
+    await page?.screenshot({ path: 'test-results/fullstack-failure.png', timeout: 10000 }).catch(() => {});
+    throw error;
+  } finally { try { await browser?.close(); } finally { await stop(); } }
 });
