@@ -1,112 +1,74 @@
-(() => {
-  const model = { user: null, config: {}, ready: null, open: () => {}, require: () => true };
+﻿(() => {
+  const model = { user: null, ready: null };
   window.RailGoAuth = model;
-  if (LiveTrainAPI.isStatic) { model.ready = Promise.resolve(); return; }
-  model.ready = Promise.all([
-    LiveTrainAPI.request('/api/auth/me').then(data => { model.user = data.user; }).catch(() => {}),
-    LiveTrainAPI.request('/api/auth/config').then(data => { model.config = data; }).catch(() => { model.configError = true; }),
-  ]);
-  let phone = '', step = 0, resendAt = 0;
-  const modal = document.createElement('div');
-  modal.id = 'authModal'; modal.className = 'modal-backdrop'; modal.hidden = true;
-  document.body.append(modal);
-  const request = (path, body) => LiveTrainAPI.request(`/api/auth/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  function close() { modal.hidden = true; }
+  let challenge = null, busy = false;
+  const el = id => document.getElementById(id);
+  const request = (path, body) => LiveTrainAPI.request('/api/auth/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  const refreshProfile = () => { const label = document.querySelector('#profileBtn b'); if (label) label.textContent = model.user ? model.user.email : 'Sign in'; };
+  model.ready = LiveTrainAPI.isStatic ? Promise.resolve() : request('me').then(data => { model.user = data.user; refreshProfile(); }).catch(() => {});
+  function error(message) { if (el('authError')) el('authError').textContent = message; }
   function render() {
-    const devNote = model.config.devOtp ? 'Development only: no SMS is sent. OTP: 123456.' : model.config.smsReady ? 'A verification code will be sent by SMS to your mobile.' : 'SMS sign-in setup is incomplete. Please contact the app owner.';
-    const screens = [
-      `<h2>Welcome Back</h2><p>Enter your mobile number to continue</p><form id="phoneForm"><div class="phone-row"><span>+91</span><input id="authPhone" aria-label="Mobile number" type="tel" inputmode="numeric" autocomplete="tel-national" pattern="[6-9][0-9]{9}" maxlength="10" required placeholder="Enter mobile number" value="${escapeHtml(phone)}"></div><button class="primary-button">Send OTP</button></form><p class="auth-note">${devNote}</p>`,
-      `<h2>Verify OTP</h2><p>Enter the code for +91 ${escapeHtml(phone)}</p><form id="otpForm"><div class="otp-row">${Array.from({ length: 6 }, (_, i) => `<input aria-label="OTP digit ${i + 1}" inputmode="numeric" maxlength="1" pattern="[0-9]" required>`).join('')}</div><button class="primary-button">Verify & Continue</button></form><button class="auth-link" id="resendOtp">Resend OTP (60-second delay)</button><button class="auth-link" id="editPhone">Change number</button>`,
-      `<h2>Login with Google</h2><p>Mobile verified. Complete your sign-in.</p><button class="google-button" id="googleLogin"><b>G</b> Continue with Google</button><p class="auth-note">${model.config.devGoogle ? 'DEVELOPMENT LOGIN: a demo Google profile will be used.' : 'Continue securely through Google.'}</p>`,
-    ];
-    modal.innerHTML = `<section class="modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="authHeading"><button class="modal-close" id="closeAuth" aria-label="Close login">×</button><h3 id="authHeading">RailGo</h3>${screens[step]}<p id="authError" role="alert" class="modal-error"></p></section>`;
-    document.getElementById('closeAuth').onclick = close;
-    if (step === 0 && !model.config.smsReady) document.querySelector('#phoneForm button').disabled = true;
-    if (step === 2 && !model.config.googleReady) {
-      document.getElementById('googleLogin').disabled = true;
-      modal.querySelector('.auth-note').textContent = 'Google sign-in setup is incomplete. Please contact the app owner.';
-    }
-    if (model.configError) {
-      modal.querySelector('.auth-note').textContent = 'Cannot reach the login service. Check your connection and retry.';
-      const retry = document.createElement('button'); retry.className = 'auth-link'; retry.textContent = 'Retry connection';
-      retry.onclick = async () => { retry.disabled = true; await model.open(); }; modal.querySelector('section').append(retry);
-    }
-    const run = async (button, work) => { if (button) button.disabled = true; document.getElementById('authError').textContent = ''; try { await work(); } catch (error) { const message = document.getElementById('authError'); if (message) message.textContent = error.message; } finally { if (button?.isConnected) button.disabled = false; } };
-    if (step === 0) document.getElementById('phoneForm').onsubmit = event => {
-      event.preventDefault(); phone = document.getElementById('authPhone').value;
-      run(event.submitter, async () => { await request('send-otp', { mobileNumber: phone }); resendAt = Date.now() + 60000; step = 1; render(); });
-    };
-    if (step === 1) {
-      const inputs = [...modal.querySelectorAll('.otp-row input')];
-      inputs.forEach((input, i) => {
-        input.oninput = () => { input.value = input.value.replace(/\D/g, '').slice(-1); if (input.value) inputs[i + 1]?.focus(); };
-        input.onkeydown = event => { if (event.key === 'Backspace' && !input.value) inputs[i - 1]?.focus(); };
-        input.onpaste = event => { event.preventDefault(); const digits = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6); [...digits].forEach((digit, j) => { if (inputs[i + j]) inputs[i + j].value = digit; }); inputs[Math.min(i + digits.length, 5)].focus(); };
-      });
-      document.getElementById('otpForm').onsubmit = event => { event.preventDefault(); run(event.submitter, async () => { await request('verify-otp', { mobileNumber: phone, otp: inputs.map(i => i.value).join('') }); step = 2; render(); }); };
-      document.getElementById('editPhone').onclick = () => { step = 0; render(); };
-      document.getElementById('resendOtp').onclick = event => run(event.target, async () => {
-        if (Date.now() < resendAt) throw new Error(`Wait ${Math.ceil((resendAt - Date.now()) / 1000)} seconds to resend.`);
-        await request('send-otp', { mobileNumber: phone }); resendAt = Date.now() + 60000;
-        document.getElementById('authError').textContent = 'New code requested.';
-      });
-    }
-    if (step === 2) document.getElementById('googleLogin').onclick = event => { event.currentTarget.disabled = true; location.assign(LiveTrainAPI.apiUrl('/api/auth/google')); };
-    modal.querySelector('input, .primary-button, .google-button')?.focus();
-  }
-  let openRequest = 0;
-  model.open = async () => {
-    const requestId = ++openRequest;
-    if (!model.user) {
-      try { model.config = await LiveTrainAPI.request('/api/auth/config'); model.configError = false; }
-      catch { model.config = {}; model.configError = true; }
-      if (requestId !== openRequest) return;
-      const pending = model.config.pendingOtp;
-      if (pending) { phone = pending.mobileNumber; resendAt = new Date(pending.resendAt).getTime(); }
+    el('modalTitle').textContent = model.user ? 'Your account' : 'Sign in with email';
+    el('bookingModal').hidden = false;
+    if (LiveTrainAPI.isStatic) {
+      el('modalBody').innerHTML = '<p>This preview saves demo bookings on this device. Email sign-in is available on the connected RailGo service.</p>';
+      return;
     }
     if (model.user) {
-      modal.innerHTML = `<section class="modal auth-modal" role="dialog" aria-modal="true"><h2>${escapeHtml(model.user.name)}</h2><p>+91 ${escapeHtml(model.user.mobileNumber)}</p><button id="logoutBtn" class="primary-button">Log out</button><button id="closeProfile" class="auth-link">Close</button><p id="profileError" role="alert"></p></section>`;
-      document.getElementById('closeProfile').onclick = close;
-      document.getElementById('logoutBtn').onclick = async event => {
-        event.currentTarget.disabled = true;
-        try { await request('logout', {}); closeLiveConnection(); location.assign('/login'); }
-        catch (error) { document.getElementById('profileError').textContent = error.message; event.target.disabled = false; }
-      };
-    } else { step = model.config.mobileVerified ? 2 : model.config.pendingOtp ? 1 : 0; render(); }
-    modal.hidden = false;
-  };
-  model.require = () => { if (model.user) return true; model.open(); return false; };
-  window.addEventListener('railgo-auth-required', () => { if (model.user) { model.user = null; closeLiveConnection(); model.open(); } });
-  modal.onclick = event => { if (event.target === modal) close(); };
-  modal.addEventListener('keydown', event => {
-    if (event.key === 'Escape') close();
-    if (event.key !== 'Tab') return;
-    const nodes = [...modal.querySelectorAll('button:not(:disabled), input')], first = nodes[0], last = nodes.at(-1);
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-  });
-  document.addEventListener('DOMContentLoaded', async () => {
-    await model.ready;
-    document.getElementById('profileBtn').onclick = model.open;
-    document.getElementById('mobileProfile').onclick = model.open;
-    if (model.user) document.querySelector('.user-chip b').textContent = `Hi, ${model.user.name}`;
-    if (location.pathname === '/login') {
-      if (model.user) location.replace('/dashboard');
-      else {
-        await model.open();
-        const messages = {
-          configuration: 'Google sign-in is not configured yet. Please contact the app owner.',
-          mobile: 'Your mobile verification expired. Please verify your number again.',
-          state: 'The sign-in session could not be verified. Please try Google again.',
-          denied: 'Google sign-in was cancelled. You can try again.',
-          account: 'Use the Google account already linked to your mobile number.',
-          google: 'Google could not complete sign-in. Please try again.',
-          host: 'Continue on this address and verify your mobile again to use Google securely.',
-        };
-        const code = new URLSearchParams(location.search).get('error');
-        if (messages[code]) document.getElementById('authError').textContent = messages[code];
-        if (code) history.replaceState(null, '', '/login');
-      }
+      el('modalBody').innerHTML = '<p id="profileEmail"></p><p>Your bookings are linked to this email.</p><button class="primary-button" id="emailLogout">Sign out</button><p id="authError" role="alert"></p>';
+      el('profileEmail').textContent = model.user.email;
+      el('emailLogout').onclick = async () => { try { await request('logout', {}); location.assign('/login'); } catch (e) { error(e.message); } };
+      return;
     }
+    el('modalBody').innerHTML = `<p>Get a six-digit verification code in your inbox.</p><form id="emailLoginForm"><label class="field"><span>Email address</span><input id="authEmail" type="email" autocomplete="email" maxlength="254" required></label>${challenge ? '<label class="field" style="margin-top:12px"><span>Verification code</span><input id="authEmailCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label><p>The code expires in 10 minutes. Check your spam folder too.</p>' : ''}<button class="primary-button" id="authSubmit" style="margin-top:16px" type="submit">${challenge ? 'Verify & sign in' : 'Send code'}</button></form>${challenge ? '<p><button class="secondary-button" id="authResend">Resend code</button> <button class="secondary-button" id="authChange">Change email</button></p>' : ''}<p id="authError" class="form-error" role="alert" aria-live="polite"></p>`;
+    if (challenge) { el('authEmail').value = challenge.email; el('authEmail').readOnly = true; }
+    const act = async verify => {
+      if (busy) return;
+      busy = true;
+      el('authSubmit').disabled = true;
+      error('');
+      try {
+        const email = el('authEmail').value.trim().toLowerCase();
+        if (verify) {
+          const data = await request('email/verify', { email, code: el('authEmailCode').value.trim() });
+          model.user = data.user;
+          location.assign(location.pathname === '/login' ? '/dashboard' : location.href);
+        } else {
+          const data = await request('email/send', { email });
+          challenge = data;
+          render();
+          el('authEmailCode').focus();
+        }
+      } catch (e) { error(e.message); }
+      finally { busy = false; if (el('authSubmit')) el('authSubmit').disabled = false; }
+    };
+    el('emailLoginForm').onsubmit = event => { event.preventDefault(); act(Boolean(challenge)); };
+    if (challenge) {
+      el('authResend').onclick = () => {
+        if (Date.now() < new Date(challenge.retryAt).getTime()) { error('Please wait 60 seconds before requesting another code.'); return; }
+        act(false);
+      };
+      el('authChange').onclick = () => { if (!busy) { challenge = null; render(); } };
+    }
+  }
+  model.open = async () => {
+    render();
+    if (model.user || LiveTrainAPI.isStatic || busy) return;
+    el('authSubmit').disabled = true;
+    try {
+      const config = await request('config');
+      if (el('bookingModal').hidden || !el('authSubmit')) return;
+      challenge = config.pending;
+      render();
+      if (!config.configured) { el('authSubmit').disabled = true; error('Email sign-in is not available yet. Please contact the site owner.'); }
+    } catch (e) { error(e.message); }
+  };
+  model.require = () => { if (LiveTrainAPI.isStatic || model.user) return true; model.open(); return false; };
+  window.addEventListener('railgo-auth-required', () => { model.user = null; refreshProfile(); closeLiveConnection(); model.open(); });
+  document.addEventListener('DOMContentLoaded', () => {
+    el('profileBtn').onclick = model.open;
+    el('mobileProfile').onclick = model.open;
+    refreshProfile();
+    model.ready.then(() => { if (location.pathname === '/login') model.open(); });
   });
 })();

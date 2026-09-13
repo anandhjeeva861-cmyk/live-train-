@@ -23,23 +23,9 @@ services:
         value: "true"
       - key: SESSION_SECRET
         generateValue: true
-      - key: DEV_OTP_MODE
-        value: "false"
-      - key: DEV_GOOGLE_AUTH
-        value: "false"
-      - key: SMS_PROVIDER
-        value: twilio-verify
-      - key: TWILIO_ACCOUNT_SID
-        sync: false
-      - key: TWILIO_AUTH_TOKEN
-        sync: false
-      - key: TWILIO_VERIFY_SERVICE_SID
-        sync: false
-      - key: GOOGLE_CLIENT_ID
-        sync: false
-      - key: GOOGLE_CLIENT_SECRET
-        sync: false
-      - key: GOOGLE_CALLBACK_URL
-        sync: false
       - key: FRONTEND_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
         sync: false

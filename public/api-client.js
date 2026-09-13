@@ -5,9 +5,9 @@
   if (configuredBase) {
     const url = new URL(configuredBase);
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== '/') throw new Error('Invalid Live Train backend URL');
-    // The Express app serves the same frontend. Keep OTP, OAuth and session
+    // The Express app serves the same frontend. Keep browser session
     // cookies on that origin instead of depending on third-party cookies.
-    if (url.origin !== location.origin) { movingToBackend = true; location.replace(`${url.origin}/login`); }
+    if (url.origin !== location.origin) { movingToBackend = true; location.replace(`${url.origin}/dashboard`); }
   }
   const isStatic = !configuredBase && (document.documentElement.dataset.hosting === 'static' || location.hostname.endsWith('.github.io'));
   let staticModule;

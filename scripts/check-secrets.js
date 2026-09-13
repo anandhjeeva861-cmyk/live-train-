@@ -22,6 +22,7 @@ export function scanText(file, content) {
     const assignment = line.match(/\b(?:[A-Z_]*API_(?:SECRET|KEY)|JWT_SECRET|SESSION_SECRET|GOOGLE_CLIENT_SECRET|TWILIO_AUTH_TOKEN|AWS_SECRET_ACCESS_KEY|SMS_API_SECRET)\b["']?\s*[:=]\s*(.*)/);
     if (!assignment) return;
     const raw = assignment[1].trim();
+    if (/\.(?:m?js|ts)$/.test(file) && /^[$A-Z_a-z][$\w]*\s*(?:[,;}].*)?$/.test(raw)) return; // JavaScript identifier supplied by the caller, not a literal credential.
     if (/\.(?:m?js|ts)$/.test(file) && /process\.env\./.test(line) && /^\w+\s*;?$/.test(raw)) return; // Variable reference, not a literal.
     // Expressions read backend configuration or generate runtime-only secrets.
     if (/^(?:process\.env\.|crypto\.|`|\$\{)/.test(raw)) return;

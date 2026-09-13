@@ -11,6 +11,7 @@ model User {
   mobileNumber   String   @unique
   mobileVerified Boolean  @default(false)
   email          String?  @unique
+  emailVerified  Boolean  @default(false)
   googleId       String?  @unique
   name           String
   avatar         String?
@@ -30,6 +31,19 @@ model OtpVerification {
   attempts     Int      @default(0)
   verified     Boolean  @default(false)
   createdAt    DateTime @default(now())
+  @@index([expiresAt])
+}
+
+model EmailVerification {
+  id           String   @id
+  email        String   @unique
+  sessionHash  String
+  codeHash     String
+  expiresAt    DateTime
+  sentAt       DateTime @default(now())
+  attempts     Int      @default(0)
+  consumed     Boolean  @default(false)
+  delivered    Boolean  @default(false)
   @@index([expiresAt])
 }
 

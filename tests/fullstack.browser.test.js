@@ -3,15 +3,15 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
-import { databaseEnvironment } from './helpers.js';
+import { databaseEnvironment, readEmailCode } from './helpers.js';
 
-test('login, checkout, reload/restart persistence, tracking and responsive frontend', { timeout: 180000 }, async t => {
+test('email OTP login, checkout, reload/restart persistence, tracking and responsive frontend', { timeout: 180000 }, async t => {
   const env = { ...databaseEnvironment('fullstack-browser'), PORT: '4189' };
   const base = 'http://127.0.0.1:4189';
   let child, browser, page;
   t.signal.addEventListener('abort', () => { child?.kill('SIGKILL'); browser?.close().catch(() => {}); }, { once: true });
   async function start() {
-    child = spawn(process.execPath, ['server.js'], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    child = spawn(process.execPath, ['--import', './tests/email-provider.fixture.js', 'server.js'], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Server start timed out')), 15000);
       child.stdout.on('data', data => { if (String(data).includes('Live Train v2 running')) { clearTimeout(timer); resolve(); } });
@@ -46,24 +46,20 @@ test('login, checkout, reload/restart persistence, tracking and responsive front
     });
     let weatherRequests = 0;
     page.on('request', request => { if (request.url().includes('/api/weather?')) weatherRequests++; });
-    await page.goto(`${base}/bookings`);
-    assert.equal(new URL(page.url()).pathname, '/login');
-    await page.locator('#authPhone').fill('9876501234');
-    await page.locator('#phoneForm button').click();
-    await page.waitForSelector('#otpForm');
+    await page.goto(`${base}/login`);
+    await page.waitForFunction(() => !document.getElementById('authSubmit').disabled);
+    await page.locator('#authEmail').fill('traveller@example.test');
+    await page.locator('#authSubmit').click();
+    await page.locator('#authEmailCode').waitFor();
     await page.reload();
-    await page.waitForSelector('#otpForm');
-    assert.match(await page.locator('#authModal').innerText(), /9876501234/);
-    for (let i = 0; i < 6; i++) await page.locator('.otp-row input').nth(i).fill(String(i + 1));
-    await page.locator('#otpForm button').click();
-    await page.waitForSelector('#googleLogin');
-    await page.locator('#closeAuth').click();
-    await page.locator('#profileBtn').click();
-    await page.waitForSelector('#googleLogin');
-    assert.match(await page.locator('#authModal').innerText(), /DEVELOPMENT LOGIN/);
-    await Promise.all([page.waitForURL('**/dashboard'), page.locator('#googleLogin').click()]);
+    await page.locator('#authEmailCode').fill(readEmailCode(env.MAIL_TEST_OUTBOX, 'traveller@example.test'));
+    await page.locator('#authSubmit').click();
+    await page.waitForURL('**/dashboard');
     await page.waitForFunction(() => RailGoAuth.user && document.querySelectorAll('.train-card').length === 2);
-    console.log('Browser check: OTP reload and Google reopen completed.');
+    assert.equal(await page.locator('#authPhone, #otpForm, #googleLogin').count(), 0);
+    await page.locator('#profileBtn').click();
+    assert.match(await page.locator('#modalBody').innerText(), /traveller@example.test/);
+    await page.locator('#modalClose').click();
     await page.locator('#passengers').selectOption('2');
     await page.locator('[data-book]').first().click();
     await page.waitForSelector('.seat-button:not(.booked)');
@@ -132,23 +128,14 @@ test('login, checkout, reload/restart persistence, tracking and responsive front
     await page.waitForFunction(() => document.querySelector('.booking-item').textContent.includes('CANCELLED'));
     await page.waitForFunction(() => /adventure|Sign in/.test(document.querySelector('#upcomingJourneys').textContent));
     await page.locator('#mobileProfile').click();
-    await Promise.all([page.waitForURL('**/login'), page.locator('#logoutBtn').click()]);
+    assert.match(await page.locator('#modalBody').innerText(), /traveller@example.test/);
+    await page.locator('#emailLogout').click();
+    await page.waitForURL('**/login');
     assert.equal((await page.request.get(`${base}/api/bookings`)).status(), 401);
-    await page.route('**/api/auth/config', route => route.fulfill({ status: 503, json: { error: 'Test outage' } }));
-    console.log('Browser check: testing login configuration outage recovery.');
-    await page.reload();
-    await page.getByRole('button', { name: 'Retry connection' }).waitFor();
-    await page.unroute('**/api/auth/config');
-    await page.getByRole('button', { name: 'Retry connection' }).click();
-    await page.waitForFunction(() => document.querySelector('#phoneForm button')?.disabled === false);
-    assert.equal(await page.locator('#phoneForm button').isEnabled(), true);
     assert.deepEqual(errors, []);
   } catch (error) {
     console.error('Browser failure state:', await page?.evaluate(() => ({
-      path: location.pathname, configError: RailGoAuth.configError,
-      smsReady: RailGoAuth.config.smsReady, devOtp: RailGoAuth.config.devOtp,
-      loginVisible: !document.getElementById('authModal')?.hidden,
-      phoneSubmitDisabled: document.querySelector('#phoneForm button')?.disabled,
+      path: location.pathname, userReady: Boolean(RailGoAuth.user),
     })).catch(() => 'Page unavailable'));
     await page?.screenshot({ path: 'test-results/fullstack-failure.png', timeout: 10000 }).catch(() => {});
     throw error;

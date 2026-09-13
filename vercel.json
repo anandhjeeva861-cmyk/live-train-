@@ -1,13 +1,30 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "$schema": "./.vscode/vercel.schema.json",
   "framework": null,
-  "buildCommand": "node scripts/stage-pages.js",
-  "outputDirectory": "dist/pages",
+  "buildCommand": "npm run build:vercel",
+  "outputDirectory": "dist/vercel",
   "rewrites": [
-    { "source": "/login", "destination": "/index.html" },
-    { "source": "/dashboard", "destination": "/index.html" },
-    { "source": "/book", "destination": "/index.html" },
-    { "source": "/bookings", "destination": "/index.html" },
-    { "source": "/tracking", "destination": "/index.html" }
-  ]
+    {
+      "source": "/login",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/book",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/bookings",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/tracking",
+      "destination": "/index.html"
+    }
+  ],
+  "installCommand": "npm ci --ignore-scripts",
+  "trailingSlash": false
 }

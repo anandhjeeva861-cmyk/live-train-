@@ -1,12 +1,12 @@
 # RailGo — booking, tracking and tourism
 
-The existing Vande Bharat dashboard, HTML/CSS/JavaScript frontend, Leaflet maps, Tamil/English voice assistant and GitHub Pages demo are preserved. Express now serves Prisma/SQLite application data, server-side authentication and transactional demo bookings.
+The existing Vande Bharat dashboard, HTML/CSS/JavaScript frontend, Leaflet maps, Tamil/English voice assistant and GitHub Pages demo are preserved. Express now serves Prisma/SQLite application data, browser sessions and transactional demo bookings.
 
-For GitHub Pages, Vercel and persistent backend hosting, see [DEPLOYMENT.md](DEPLOYMENT.md). Publishing source code alone does not configure SMS/Google credentials or start a database server.
+For GitHub Pages, Vercel and persistent backend hosting, see [DEPLOYMENT.md](DEPLOYMENT.md). Vercel serves the static browser demo; the database backend needs persistent hosting.
 
 ## Run locally
 
-Requires Node.js **22.12+** (tested on Node 24) and npm. No PostgreSQL installation is needed. Real login requires Twilio Verify and Google OAuth credentials: follow [AUTH_SETUP.md](AUTH_SETUP.md), then run `npm run auth:check`. Real authentication is now the default; missing credentials show a setup message without silently using demo login.
+Requires Node.js **22.12+** (tested on Node 24) and npm. No PostgreSQL installation is needed. No mobile verification or Google account is required. Configure email delivery as described in AUTH_SETUP.md.
 
 ```powershell
 npm install
@@ -15,7 +15,7 @@ npm run dev
 
 After dependencies are installed, **`npm run dev` is the one-command startup**. It creates `.env` if needed, generates a private local session secret, generates Prisma Client, applies committed migrations, safely seeds missing catalog records, and starts Express with watching. It never resets bookings.
 
-The default address is `http://localhost:4173`. **This workspace's local `.env` uses `http://localhost:4174` because another service already occupies 4173.** Use the address printed by startup. Change `PORT`, `FRONTEND_URL` and `GOOGLE_CALLBACK_URL` together if choosing another port.
+The default address is `http://localhost:4173`. **This workspace's local `.env` uses `http://localhost:4174` because another service already occupies 4173.** Use the address printed by startup. Change `PORT` and `FRONTEND_URL` together if choosing another port.
 
 The equivalent explicit setup is:
 
@@ -28,24 +28,17 @@ The equivalent explicit setup is:
 
 For an already configured database, `npm start` runs the server without migrations or watching. Development bootstrap writes a random `SESSION_SECRET` only into ignored `.env`; it is never displayed. With direct `npm start` and no secret configured, development uses an ephemeral session signing secret, so sessions then expire on server restart.
 
-## Development login and booking
+## Email login and booking
 
-For offline testing only, explicitly set both `DEV_OTP_MODE=true` and `DEV_GOOGLE_AUTH=true` in local `.env` and restart. With the default `false` values, enter the code actually received by SMS and complete Google's account chooser. Automated tests configure their own isolated demo environment.
+Configure Resend using [AUTH_SETUP.md](AUTH_SETUP.md), open `/login`, enter your email and verify the code from your inbox. Then search for a train and confirm a demo booking. Profile shows the signed-in email and supports logout.
 
-1. Open `/login`, or select **Sign in / Profile**.
-2. Enter an Indian 10-digit mobile number starting with 6–9. The UI supplies +91; the API also accepts the +91 prefix.
-3. Enter development OTP **123456**.
-4. Select **Continue with Google**. With `DEV_GOOGLE_AUTH=true`, the backend creates a clearly identified development profile and redirects to `/dashboard`.
-5. Search Chennai (MAS) → Bengaluru (SBC), choose a date and train type, select **Book Now**, enter each passenger's details, choose the first passenger's seat and confirm. Other passengers receive distinct available seats in that class.
-6. View saved PNRs in **My Bookings**, use a PNR or train number for tracking, or cancel a demo ticket to restore seats.
+Bookings are linked to the verified email, so signing in on another browser recovers the same account. Existing guest bookings are linked if the original guest cookie is still present. Mobile and Google login endpoints remain removed. Legacy database fields are retained without collecting a phone number.
 
-Demo OTP hashes use bcrypt; real OTP generation and checking belong to Twilio Verify, with only the provider verification ID stored locally. Codes expire locally after five minutes, attempts are limited to five, and resending requires 60 seconds. Google login requires a recently verified mobile in the same browser. Sessions use HttpOnly, SameSite cookies and SQLite storage. Logging out revokes the session and its streams. Bookings and PNR lookups are restricted to their owner.
-
-The four old, unowned JSON demo bookings remain intact in `data/bookings.json`. They are not silently assigned to a new account. New bookings use the database; the separate static Pages demo continues to use browser storage.
+The Vercel/Pages static preview remains a labelled device-only demo. Connect it to the configured backend for real email authentication.
 
 ## Data and inventory
 
-Prisma models: `User`, `OtpVerification`, `Session`, `Station`, `Train`, `TrainStop`, `TrainClass`, `JourneyInventory`, `Booking`, `Passenger`, `SeatReservation`, `LiveTrainStatus`, `TouristSpot`.
+Prisma models: `User`, `OtpVerification`, `EmailVerification`, `Session`, `Station`, `Train`, `TrainStop`, `TrainClass`, `JourneyInventory`, `Booking`, `Passenger`, `SeatReservation`, `LiveTrainStatus`, `TouristSpot`.
 
 Seed data includes all **36 stations, 1,209 trains and 12 tourist spots** from the existing catalog. Named demo services include 12639 Brindavan Express, 12027 Chennai Bengaluru Shatabdi and TR101 South Heritage Tourism Special. Bengaluru has Lalbagh, Bangalore Palace, Cubbon Park and Nandi Hills. Local destination images provide fallbacks; a fallback may be illustrative.
 
@@ -60,12 +53,10 @@ For PostgreSQL later: change the Prisma datasource provider, replace the SQLite 
 | Method | Endpoint | Purpose |
 |---|---|---|
 | GET | `/api/health` | Database/server health |
-| GET | `/api/auth/config` | Public development-mode indicators |
-| POST | `/api/auth/send-otp` | `{mobileNumber}` |
-| POST | `/api/auth/verify-otp` | `{mobileNumber, otp}` |
-| GET | `/api/auth/google` | Google or explicit development login |
-| GET | `/api/auth/google/callback` | Validated OAuth callback with state and PKCE |
-| GET | `/api/auth/me` | Current authenticated account |
+| GET | `/api/auth/config` | Email setup status and pending browser challenge |
+| POST | `/api/auth/email/send` | Send code: `{ "email": "you@example.com" }` |
+| POST | `/api/auth/email/verify` | Verify code: `{ "email": "you@example.com", "code": "six digits from inbox" }` |
+| GET | `/api/auth/me` | Current browser profile |
 | POST | `/api/auth/logout` | Revoke session |
 | GET | `/api/stations?q=` | Station list/search |
 | GET | `/api/trains?from=MAS&to=SBC&date=2099-10-12&type=normal&class=CC` | Exact origin/destination search; no unrelated fallback |
@@ -112,7 +103,7 @@ The existing **Ask Live Train** panel supports Tamil, English and Tanglish comma
 
 Basic commands work without an AI key. Optionally configure `OPENAI_API_KEY` and `OPENAI_MODEL` in local `.env` for the existing server-side AI integration. Never put credentials in `public/config.js`. Live application answers use database catalog records. The assistant does not perform booking, cancellation or payment mutations.
 
-GitHub Pages remains a **separate browser-only demo**, with localStorage tickets and simulated tracking. It cannot run Express, SQLite, real authentication or private AI calls. Run `npm run build:pages` after modifying `public/index.html`; the root `index.html` is generated. The hosted backend origin is configured in one place, `public/config.js` (`apiBase`). When it points to another origin, the browser opens that server's `/login` and uses its frontend, API and session cookies together. This avoids depending on third-party cookies for OTP and Google callbacks.
+GitHub Pages remains a **separate browser-only demo**, with localStorage tickets and simulated tracking. It cannot run Express, SQLite, real authentication or private AI calls. Run `npm run build:pages` after modifying `public/index.html`; the root `index.html` is generated. The hosted backend origin is configured in one place, `public/config.js` (`apiBase`). When it points to another origin, the browser opens that server's `/dashboard` and uses its frontend, API and session cookies together. This keeps browser session cookies on the backend origin.
 
 ## Tests
 
@@ -127,20 +118,18 @@ node scripts/check-secrets.js --history
 npm audit
 ```
 
-Backend tests create isolated SQLite databases under ignored `test-results/`. They test auth, expiry/attempt limits, route/class/date filtering, full-catalog loading, ownership, concurrent claims, cancellations, tracking/SSE cleanup, tourism, weather outages, and production development-mode rejection. Browser tests cover the login → OTP → Google → dashboard flow, booking, reload **and server restart** persistence, PNR tracking, train switching, image fallback, logout, assistant regression and widths 360/390/768/1024. Screenshots are saved in `test-results/`.
+Backend tests use isolated SQLite databases and cover guest sessions, removed login endpoints, booking ownership, seat concurrency, tracking and session revocation. Browser tests cover direct access, booking persistence through refresh and restart, tracking, assistant actions and responsive layouts.
 
-Browser tests use installed Chrome/Edge, `BROWSER_PATH`, or Playwright Chromium (`npx playwright install chromium`). Speech and AI provider behavior are mocked in regression tests. Genuine Google OAuth, SMS delivery, live AI billing/access and microphone hardware require their external services/devices. See `PROJECT_AUDIT.md` for executed results.
+Browser tests use installed Chrome/Edge, `BROWSER_PATH`, or Playwright Chromium (`npx playwright install chromium`). Speech and AI provider behavior are mocked in regression tests. Live AI billing/access and microphone hardware require their external services/devices. See `PROJECT_AUDIT.md` for executed results.
 
 ## Production and secret safety
 
 Copy `.env.example` to `.env` only for initial setup. Add credentials **only** to local `.env`; never commit it. Set production secrets in the hosting provider's environment settings. Example credential fields are empty; no realistic fake credentials are provided.
 
-Production startup refuses `DEV_OTP_MODE=true` or `DEV_GOOGLE_AUTH=true` and requires a strong `SESSION_SECRET` (or `JWT_SECRET` as an alternative session-signing configuration). Production uses Secure cookies and requires HTTPS. Configure `TRUST_PROXY=true` only behind your trusted single reverse proxy.
+Production requires a strong SESSION_SECRET (or JWT_SECRET). Secure cookies require HTTPS. Set TRUST_PROXY=true only behind your trusted single reverse proxy.
 
 Remaining production integrations:
 
-- Twilio account credentials and a Verify Service with SMS enabled. The adapter is implemented; actual delivery requires an active account with recipient/country access. See [AUTH_SETUP.md](AUTH_SETUP.md).
-- Google OAuth client ID, client secret and registered callback URL. State, PKCE and ID-token verification are implemented; real credentials were unavailable for testing.
 - Authorized railway tracking, reservation/PNR and ticket-issuance providers. Production tracking returns 503 until a real provider is added.
 - Payment provider and verified webhooks for real payments. Current tickets/cancellations have no money movement and are not valid railway tickets.
 - Optional AI credentials; production hosting, backups, monitoring and PostgreSQL migration when needed.

@@ -82,11 +82,44 @@ test('GitHub Pages works under a repository path with no backend', { timeout: 90
     assert.deepEqual(apiCalls, [], 'Static demo must not request nonexistent /api endpoints');
     assert.deepEqual(failedLocal, [], 'All repository-relative assets must load');
     assert.deepEqual(errors, []);
-    // A configured backend must own login cookies; don't attempt cross-site OTP fetches.
+    // A configured backend must own login cookies; don't attempt cross-site session fetches.
     await page.route('**/public/config.js', route => route.fulfill({ contentType: 'application/javascript', body: "window.LIVE_TRAIN_CONFIG = { apiBase: 'https://railgo.example.test' };" }));
-    await page.route('https://railgo.example.test/login', route => route.fulfill({ contentType: 'text/html', body: '<h1>Hosted RailGo login</h1>' }));
+    await page.route('https://railgo.example.test/dashboard', route => route.fulfill({ contentType: 'text/html', body: '<h1>Hosted RailGo login</h1>' }));
     await page.goto(url, { waitUntil: 'commit' });
-    await page.waitForURL('https://railgo.example.test/login');
+    await page.waitForURL('https://railgo.example.test/dashboard');
     assert.equal(await page.locator('h1').innerText(), 'Hosted RailGo login');
   } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
+});
+
+
+test('Vercel artifact loads direct routes without login or backend requests', { timeout: 90000 }, async () => {
+  await import('../scripts/build-vercel.js');
+  const { readFile } = await import('node:fs/promises');
+  const config = JSON.parse(await readFile('vercel.json', 'utf8'));
+  const root = fileURLToPath(new URL('../' + config.outputDirectory + '/', import.meta.url));
+  const app = express();
+  app.use(express.static(root));
+  for (const rule of config.rewrites) app.get(rule.source, (_req, res) => res.sendFile(root + 'index.html'));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  let browser;
+  try {
+    const executablePath = process.env.BROWSER_PATH || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
+    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    const origin = 'http://127.0.0.1:' + server.address().port;
+    const errors = [];
+    page.on('pageerror', e => errors.push(e.message));
+    page.on('response', r => { if (r.url().startsWith(origin) && r.status() >= 400) errors.push(r.url()); });
+    page.on('request', r => { if (r.url().startsWith(origin + '/api/')) errors.push(r.url()); });
+    for (const route of ['/', ...config.rewrites.map(r => r.source)]) {
+      await page.goto(origin + route);
+      await page.waitForFunction(() => document.querySelectorAll('.train-card').length === 2);
+      assert.equal(await page.locator('#authPhone, #otpForm, #googleLogin, #googleDemo').count(), 0);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    }
+    await page.locator('#mobileProfile').click();
+    assert.match(await page.locator('#modalBody').innerText(), /Email sign-in is available on the connected RailGo service/);
+    assert.deepEqual(errors, []);
+  } finally { await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });

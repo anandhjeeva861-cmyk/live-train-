@@ -632,7 +632,7 @@ async function quickTrack() {
 }
 
 async function loadBookings() {
-  if (!LiveTrainAPI.isStatic && !RailGoAuth.user) { $('#bookingList').innerHTML = '<div class="empty-card">Sign in to view your bookings.</div>'; return; }
+  if (!LiveTrainAPI.isStatic && !RailGoAuth.user) { $('#bookingList').innerHTML = '<div class="empty-card">Sign in with your email to load your bookings.</div>'; return; }
   try {
     const bookings = await fetchJson('/api/bookings');
     $('#bookingList').innerHTML = bookings.length ? bookings.map(booking => `
