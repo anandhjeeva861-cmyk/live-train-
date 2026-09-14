@@ -88,6 +88,7 @@ test('RailGo database and API integration', { timeout: 180000 }, async t => {
         assert.equal(JSON.stringify(failed.body).includes('secret provider'), false);
         assert.equal((await c('/api/auth/config')).body.pending, null);
       } finally { globalThis.fetch = original; }
+      assert.equal((await c('/api/auth/email/send', 'POST', { email: 'failure@example.test' })).status, 200, 'A failed provider send must not leave a resend cooldown');
     });
     await t.test('station, normal/tourism/class/date search and empty routes', async () => {
       assert.equal((await a('/api/trains')).body.trains.length, 1209);

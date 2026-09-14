@@ -7,7 +7,12 @@
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== '/') throw new Error('Invalid Live Train backend URL');
     // The Express app serves the same frontend. Keep browser session
     // cookies on that origin instead of depending on third-party cookies.
-    if (url.origin !== location.origin) { movingToBackend = true; location.replace(`${url.origin}/dashboard`); }
+    if (url.origin !== location.origin) {
+      movingToBackend = true;
+      const route = location.pathname.replace(/\/$/, '').split('/').pop();
+      const destination = ['dashboard', 'book', 'bookings', 'tracking'].includes(route) && location.hash !== '#login' ? route : 'login';
+      location.replace(`${url.origin}/${destination}`);
+    }
   }
   const isStatic = !configuredBase && (document.documentElement.dataset.hosting === 'static' || location.hostname.endsWith('.github.io'));
   let staticModule;

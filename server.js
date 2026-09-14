@@ -7,6 +7,7 @@ import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from './backend/db.js';
 import { authMiddleware, registerAuth, requireAuth, production, fail } from './backend/auth.js';
+import { emailSetupIssues } from './backend/email.js';
 import { registerCatalog, loadTrains, trainDto, spotDto } from './backend/catalog.js';
 import { registerBookings } from './backend/bookings.js';
 import { registerTracking, closeStreams, streams, liveSnapshot } from './backend/tracking.js';
@@ -16,7 +17,7 @@ import { getWeatherData } from './public/shared/weather.js';
 export const app = express();
 const root = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT) || 4173;
-const origin = process.env.FRONTEND_URL || `http://localhost:${port}`;
+const origin = process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
 const origins = new Set([origin, ...(!production ? [`http://localhost:${port}`, `http://127.0.0.1:${port}`] : []), ...(process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean)]);
 app.disable('x-powered-by');
 if (process.env.TRUST_PROXY === 'true') app.set('trust proxy', 1);
@@ -66,6 +67,8 @@ app.use((error, _req, res, _next) => {
 });
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const missingEmail = emailSetupIssues();
+  if (missingEmail.length) console.warn('Email login unavailable: configure ' + missingEmail.join(', ') + ' on this backend. See AUTH_SETUP.md.');
   const server = app.listen(port, error => { if (error) { console.error(`Could not listen on port ${port}. Stop the previous server or change PORT.`); process.exit(1); } console.log(`Live Train v2 running on http://localhost:${port}`); });
   const shutdown = () => { closeStreams(); server.close(async () => { await prisma.$disconnect(); process.exit(0); }); };
   process.once('SIGINT', shutdown); process.once('SIGTERM', shutdown);

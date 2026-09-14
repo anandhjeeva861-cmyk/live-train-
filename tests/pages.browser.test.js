@@ -84,9 +84,9 @@ test('GitHub Pages works under a repository path with no backend', { timeout: 90
     assert.deepEqual(errors, []);
     // A configured backend must own login cookies; don't attempt cross-site session fetches.
     await page.route('**/public/config.js', route => route.fulfill({ contentType: 'application/javascript', body: "window.LIVE_TRAIN_CONFIG = { apiBase: 'https://railgo.example.test' };" }));
-    await page.route('https://railgo.example.test/dashboard', route => route.fulfill({ contentType: 'text/html', body: '<h1>Hosted RailGo login</h1>' }));
+    await page.route('https://railgo.example.test/login', route => route.fulfill({ contentType: 'text/html', body: '<h1>Hosted RailGo login</h1>' }));
     await page.goto(url, { waitUntil: 'commit' });
-    await page.waitForURL('https://railgo.example.test/dashboard');
+    await page.waitForURL('https://railgo.example.test/login');
     assert.equal(await page.locator('h1').innerText(), 'Hosted RailGo login');
   } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
 });
@@ -119,7 +119,10 @@ test('Vercel artifact loads direct routes without login or backend requests', { 
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     }
     await page.locator('#mobileProfile').click();
-    assert.match(await page.locator('#modalBody').innerText(), /Email sign-in is available on the connected RailGo service/);
+    assert.equal(await page.locator('#mobileProfile small').innerText(), 'Email login');
+    assert.equal(await page.locator('#authEmail').isVisible(), true);
+    assert.equal(await page.locator('#authSubmit').isDisabled(), true);
+    assert.match(await page.locator('#authError').innerText(), /No code has been sent/);
     assert.deepEqual(errors, []);
   } finally { await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });

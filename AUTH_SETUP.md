@@ -1,4 +1,4 @@
-﻿# Email OTP login with Resend
+# Email OTP login with Resend
 
 RailGo signs users in with their email address and a six-digit code sent by Resend. Mobile verification and Google login remain removed.
 
@@ -19,6 +19,16 @@ Codes expire after ten minutes and permit five attempts. Resends have a sixty-se
 
 Bookings belong to the verified email account and can be recovered by signing in with the same email on another browser. Existing guest bookings are linked during verification when the browser still has its old guest cookie. Records without that cookie remain in the database; no ownership is inferred from passenger details. Existing email accounts retain their ID after email verification.
 
-Vercel currently hosts a static preview, which cannot send email or persist authenticated sessions. Deploy the existing Node/SQLite backend on persistent hosting (see `DEPLOYMENT.md`), configure Resend there, and set `apiBase` in `public/config.js` to that backend's HTTPS origin. The preview then redirects to the backend's dashboard, where sign-in works on the same origin. The optional `render.yaml` includes the two email environment variables. No service is provisioned by these file edits.
+Vercel currently hosts a static preview, which cannot send email or persist authenticated sessions. Deploy the existing Node/SQLite backend on persistent hosting (see `DEPLOYMENT.md`), configure Resend there, and set `RAILGO_BACKEND_URL` to that backend's HTTPS origin in Vercel build variables and GitHub Actions variables. The preview then redirects to the backend's login page, where sign-in works on the same origin. The optional `render.yaml` includes the two email environment variables. No service is provisioned by these file edits.
 
 Without email credentials, the server still starts and search works, but sign-in clearly reports unavailable. Automated tests intercept the Resend request with a test-only fixture; live email delivery needs your configured Resend account and has not been verified by those tests.
+
+
+If no OTP arrives:
+
+- Run `npm run auth:check`. Missing/blank `RESEND_API_KEY` or `EMAIL_FROM` means the server cannot send any email. `.env.example` is a template; put real values in the ignored `.env`, then restart `npm run dev`.
+- Confirm you opened the server address printed by startup, not Live Server or a file preview. Run `npm run auth:check -- --url http://localhost:4173`, using your actual port, to check the running server.
+- For public recipients, use a sender on your verified Resend domain. Resend's test sender is restricted; a Gmail recipient address is fine, but putting your Gmail address in `EMAIL_FROM` does not verify it as a sender domain.
+- Check the backend's sanitized email error log and the Resend dashboard. A 401/403 usually requires checking the API key, sender/domain or recipient restrictions. An accepted API request can still bounce or go to spam; check the delivery event, inbox and spam folder.
+- After a rejected delivery, the app permits retry without retaining the failed challenge's cooldown; the overall request rate limit still applies. Only the latest successfully sent code can be verified.
+- A live frontend without a deployed backend cannot send OTP. Follow the repository-specific steps in [DEPLOYMENT.md](DEPLOYMENT.md#publish-email-login-from-this-repository).

@@ -14,10 +14,25 @@ Run npm run build:pages after editing public/index.html. Root index.html remains
 
 ## Persistent backend
 
-render.yaml describes an optional paid Node service with a persistent disk. No service is provisioned by editing the file. It generates Prisma during build, applies migrations and seeds the database at startup. Set FRONTEND_URL to its HTTPS origin. The blueprint provides SESSION_SECRET, DATABASE_URL and TRUST_PROXY. No Twilio or Google credentials are needed.
+render.yaml describes an optional paid Node service with a persistent disk. No service is provisioned by editing the file. It generates Prisma during build, applies migrations and seeds the database at startup. The backend uses Render's RENDER_EXTERNAL_URL automatically. Set FRONTEND_URL only if using a custom domain. The blueprint provides SESSION_SECRET, DATABASE_URL and TRUST_PROXY. No Twilio or Google credentials are needed.
 
 Set RESEND_API_KEY and EMAIL_FROM privately on the backend as described in AUTH_SETUP.md. Verified email accounts own bookings; keep the database and session secret across deployments. Verify /api/health and make a demo booking, then confirm it survives a restart. Use one SQLite app instance and back up the disk.
 
-To connect the static frontend, put the backend's public origin in public/config.js as apiBase. Visitors then open that backend's /dashboard so cookies stay on one origin. Leave apiBase empty for standalone static mode.
+Set RAILGO_BACKEND_URL to the backend's public HTTPS origin in Vercel environment variables and in GitHub repository Actions variables. The build generates the public config; no credential is copied. Set RAILGO_REQUIRE_EMAIL_LOGIN=true so a missing backend URL fails the build. Visitors open the backend's /login; supported booking/tracking routes are preserved. Leave the URL empty only for the standalone static preview.
 
 Production railway tracking still needs an authorized feed. Bookings are demo reservations, not issued railway tickets.
+
+
+## Publish email login from this repository
+
+1. Push the updated source (including render.yaml and scripts/hosting-config.js) to GitHub. No hosted service is created by a push alone.
+2. In Render, choose New > Blueprint and connect `anandhjeeva861-cmyk/live-train-`. Use the repository's `render.yaml`. It defines a **paid Node service and persistent disk**; review Render's displayed cost before creating it. [Blueprint documentation](https://render.com/docs/blueprint-spec).
+3. Supply `RESEND_API_KEY` and `EMAIL_FROM` privately when prompted. The blueprint generates the session secret, configures SQLite persistence, applies migrations and seeds the catalog. The default Render HTTPS origin is detected automatically. No private key goes in GitHub source or frontend variables.
+4. Wait until the backend is live. Open its `/api/health` and confirm `database: connected`; `/api/auth/config` must report `configured: true`. Open its `/login` and verify a code delivered to your actual inbox. Configured does not prove inbox delivery: check Resend's delivery events if the message is absent.
+5. In **Vercel > Project > Settings > Environment Variables**, set `RAILGO_BACKEND_URL` to the backend origin (HTTPS, no trailing path), and `RAILGO_REQUIRE_EMAIL_LOGIN=true`. Apply these to each deployed environment that should have email login. Redeploy so the build can read them. Setting Resend keys on this static frontend does not start an email backend.
+6. In **GitHub > repository > Settings > Secrets and variables > Actions > Variables**, set the same two public variables. In **Settings > Pages**, choose GitHub Actions, then run **Publish RailGo Pages** from Actions. The workflow is manual; a normal push runs checks but does not publish Pages. If using branch-based Pages instead, set the public backend origin in `public/config.js` and push it; Actions build variables are not applied to branch publishing.
+7. Visit both deployed homepages. They should open the backend `/login`. The `#login` fragment also opens the login form on standalone previews, without requiring GitHub Pages to serve a `/login` route. Sign in and check that refresh retains the session.
+
+Local checks: `npm run auth:check -- --url http://localhost:4173` (use the actual printed port). For a deployed backend, pass its HTTPS origin instead. This command does not send an email or print credential values.
+
+The standalone preview now always shows the email form and a visible Email login label on mobile. Its Send code button remains disabled until a backend is connected, with an explicit message that no code was sent. A frontend-only deploy is not a working email service.

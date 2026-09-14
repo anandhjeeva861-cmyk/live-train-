@@ -13,7 +13,7 @@ const patterns = [
   ['Bearer token', /\bBearer\s+[A-Za-z0-9_+./=-]{24,}/],
   ['Password in database URL', /(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^\s:/]+:[^\s@]+@/],
 ];
-const placeholder = value => !value || /^(?:YOUR_[A-Z_]+|your_[a-z_]+|placeholder|test-only|undefined|null)$/i.test(value);
+const placeholder = value => !value.trim() || /^(?:YOUR_[A-Z_]+|your_[a-z_]+|placeholder|test-only|undefined|null)$/i.test(value);
 let findings = 0;
 function report(file, line, category) { findings++; console.error(`${file}:${line} — ${category}`); }
 export function scanText(file, content) {

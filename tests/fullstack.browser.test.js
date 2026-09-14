@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
+import express from 'express';
+import { fileURLToPath } from 'node:url';
 import { databaseEnvironment, readEmailCode } from './helpers.js';
 
 test('email OTP login, checkout, reload/restart persistence, tracking and responsive frontend', { timeout: 180000 }, async t => {
   const env = { ...databaseEnvironment('fullstack-browser'), PORT: '4189' };
   const base = 'http://127.0.0.1:4189';
-  let child, browser, page;
+  let child, browser, page, preview;
   t.signal.addEventListener('abort', () => { child?.kill('SIGKILL'); browser?.close().catch(() => {}); }, { once: true });
   async function start() {
     child = spawn(process.execPath, ['--import', './tests/email-provider.fixture.js', 'server.js'], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -46,7 +48,14 @@ test('email OTP login, checkout, reload/restart persistence, tracking and respon
     });
     let weatherRequests = 0;
     page.on('request', request => { if (request.url().includes('/api/weather?')) weatherRequests++; });
-    await page.goto(`${base}/login`);
+    // Exercise the same cross-origin navigation used by configured Pages/Vercel builds.
+    const frontend = express();
+    frontend.get('/config.js', (_req, res) => res.type('js').send(`window.LIVE_TRAIN_CONFIG = ${JSON.stringify({ apiBase: base })};`));
+    frontend.use(express.static(fileURLToPath(new URL('../public/', import.meta.url))));
+    preview = frontend.listen(0, '127.0.0.1');
+    await new Promise(resolve => preview.once('listening', resolve));
+    await page.goto(`http://127.0.0.1:${preview.address().port}/`, { waitUntil: 'commit' });
+    await page.waitForURL(`${base}/login`);
     await page.waitForFunction(() => !document.getElementById('authSubmit').disabled);
     await page.locator('#authEmail').fill('traveller@example.test');
     await page.locator('#authSubmit').click();
@@ -139,5 +148,8 @@ test('email OTP login, checkout, reload/restart persistence, tracking and respon
     })).catch(() => 'Page unavailable'));
     await page?.screenshot({ path: 'test-results/fullstack-failure.png', timeout: 10000 }).catch(() => {});
     throw error;
-  } finally { try { await browser?.close(); } finally { await stop(); } }
+  } finally {
+    try { await browser?.close(); }
+    finally { preview?.closeAllConnections(); if (preview) await new Promise(resolve => preview.close(resolve)); await stop(); }
+  }
 });

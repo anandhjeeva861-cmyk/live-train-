@@ -68,7 +68,12 @@ export function registerAuth(app) {
     });
     req.session.emailChallenge = id;
     await save(req);
-    await sendLoginEmail(email, code);
+    try { await sendLoginEmail(email, code); }
+    catch (error) {
+      // Do not leave a failed send in the resend cooldown or accept its code.
+      await prisma.emailVerification.deleteMany({ where: { id, delivered: false } });
+      throw error;
+    }
     await prisma.emailVerification.updateMany({ where: { id }, data: { delivered: true } });
     res.json({ sent: true, email, expiresAt: new Date(+now + 600000), retryAt: new Date(+now + 60000) });
   });

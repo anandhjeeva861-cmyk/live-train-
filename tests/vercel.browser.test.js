@@ -29,6 +29,11 @@ test('Vercel routes load browser assets and allow bookings without login', { tim
       await page.waitForFunction(() => document.querySelectorAll('.train-card').length === 2);
       assert.equal(await page.evaluate(() => LiveTrainAPI.isStatic), true);
       assert.equal(await page.locator('#authPhone, #otpForm, #googleLogin, input[type="tel"]').count(), 0);
+      if (route === '/login') {
+        assert.equal(await page.locator('#authEmail').isVisible(), true);
+        assert.equal(await page.locator('#authSubmit').isDisabled(), true);
+        assert.match(await page.locator('#authError').innerText(), /No code has been sent/);
+      }
     }
     await page.locator('[data-book]').first().click();
     await page.locator('.seat-button:not(.booked)').first().click();

@@ -1,19 +1,20 @@
 ﻿(() => {
   const model = { user: null, ready: null };
   window.RailGoAuth = model;
-  let challenge = null, busy = false;
+  let challenge = null, busy = false, emailDraft = '', opening = 0;
   const el = id => document.getElementById(id);
   const request = (path, body) => LiveTrainAPI.request('/api/auth/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
-  const refreshProfile = () => { const label = document.querySelector('#profileBtn b'); if (label) label.textContent = model.user ? model.user.email : 'Sign in'; };
+  const refreshProfile = () => {
+    const label = document.querySelector('#profileBtn b');
+    if (label) label.textContent = model.user ? model.user.email : 'Email login';
+    const mobile = document.querySelector('#mobileProfile small');
+    if (mobile) mobile.textContent = model.user ? 'Account' : 'Email login';
+  };
   model.ready = LiveTrainAPI.isStatic ? Promise.resolve() : request('me').then(data => { model.user = data.user; refreshProfile(); }).catch(() => {});
   function error(message) { if (el('authError')) el('authError').textContent = message; }
   function render() {
     el('modalTitle').textContent = model.user ? 'Your account' : 'Sign in with email';
     el('bookingModal').hidden = false;
-    if (LiveTrainAPI.isStatic) {
-      el('modalBody').innerHTML = '<p>This preview saves demo bookings on this device. Email sign-in is available on the connected RailGo service.</p>';
-      return;
-    }
     if (model.user) {
       el('modalBody').innerHTML = '<p id="profileEmail"></p><p>Your bookings are linked to this email.</p><button class="primary-button" id="emailLogout">Sign out</button><p id="authError" role="alert"></p>';
       el('profileEmail').textContent = model.user.email;
@@ -21,9 +22,11 @@
       return;
     }
     el('modalBody').innerHTML = `<p>Get a six-digit verification code in your inbox.</p><form id="emailLoginForm"><label class="field"><span>Email address</span><input id="authEmail" type="email" autocomplete="email" maxlength="254" required></label>${challenge ? '<label class="field" style="margin-top:12px"><span>Verification code</span><input id="authEmailCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label><p>The code expires in 10 minutes. Check your spam folder too.</p>' : ''}<button class="primary-button" id="authSubmit" style="margin-top:16px" type="submit">${challenge ? 'Verify & sign in' : 'Send code'}</button></form>${challenge ? '<p><button class="secondary-button" id="authResend">Resend code</button> <button class="secondary-button" id="authChange">Change email</button></p>' : ''}<p id="authError" class="form-error" role="alert" aria-live="polite"></p>`;
-    if (challenge) { el('authEmail').value = challenge.email; el('authEmail').readOnly = true; }
+    el('authEmail').value = challenge?.email || emailDraft;
+    el('authEmail').oninput = () => { emailDraft = el('authEmail').value; };
+    if (challenge) el('authEmail').readOnly = true;
     const act = async verify => {
-      if (busy) return;
+      if (busy || LiveTrainAPI.isStatic) return;
       busy = true;
       el('authSubmit').disabled = true;
       error('');
@@ -50,18 +53,31 @@
       };
       el('authChange').onclick = () => { if (!busy) { challenge = null; render(); } };
     }
+    if (LiveTrainAPI.isStatic) {
+      el('authSubmit').disabled = true;
+      error('Email sign-in is unavailable on this preview until the site owner connects the login service. No code has been sent.');
+    }
   }
   model.open = async () => {
+    if (busy) return;
+    const attempt = ++opening;
     render();
     if (model.user || LiveTrainAPI.isStatic || busy) return;
     el('authSubmit').disabled = true;
     try {
       const config = await request('config');
-      if (el('bookingModal').hidden || !el('authSubmit')) return;
+      if (attempt !== opening || el('bookingModal').hidden || !el('authSubmit')) return;
       challenge = config.pending;
       render();
       if (!config.configured) { el('authSubmit').disabled = true; error('Email sign-in is not available yet. Please contact the site owner.'); }
-    } catch (e) { error(e.message); }
+    } catch (e) {
+      if (attempt !== opening || !el('authError')) return;
+      error(e.message);
+      const retry = document.createElement('button');
+      retry.type = 'button'; retry.className = 'secondary-button'; retry.textContent = 'Retry connection';
+      retry.onclick = model.open;
+      el('authError').after(retry);
+    }
   };
   model.require = () => { if (LiveTrainAPI.isStatic || model.user) return true; model.open(); return false; };
   window.addEventListener('railgo-auth-required', () => { model.user = null; refreshProfile(); closeLiveConnection(); model.open(); });
@@ -69,6 +85,7 @@
     el('profileBtn').onclick = model.open;
     el('mobileProfile').onclick = model.open;
     refreshProfile();
-    model.ready.then(() => { if (location.pathname === '/login') model.open(); });
+    model.ready.then(() => { if (/\/login\/?$/.test(location.pathname) || location.hash === '#login') model.open(); });
+    window.addEventListener('hashchange', () => { if (location.hash === '#login') model.open(); });
   });
 })();
