@@ -1,7 +1,7 @@
 ﻿(() => {
   const model = { user: null, ready: null };
   window.RailGoAuth = model;
-  let challenge = null, busy = false, emailDraft = '', opening = 0;
+  let challenge = null, busy = false, emailDraft = '', opening = 0, countdown = null, configured = true;
   const el = id => document.getElementById(id);
   const request = (path, body) => LiveTrainAPI.request('/api/auth/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
   const refreshProfile = () => {
@@ -13,6 +13,7 @@
   model.ready = LiveTrainAPI.isStatic ? Promise.resolve() : request('me').then(data => { model.user = data.user; refreshProfile(); }).catch(() => {});
   function error(message) { if (el('authError')) el('authError').textContent = message; }
   function render() {
+    clearInterval(countdown);
     el('modalTitle').textContent = model.user ? 'Your account' : 'Sign in with email';
     el('bookingModal').hidden = false;
     if (model.user) {
@@ -25,8 +26,10 @@
     el('authEmail').value = challenge?.email || emailDraft;
     el('authEmail').oninput = () => { emailDraft = el('authEmail').value; };
     if (challenge) el('authEmail').readOnly = true;
+    const form = el('emailLoginForm');
+    const isCurrent = () => !el('bookingModal').hidden && el('emailLoginForm') === form;
     const act = async verify => {
-      if (busy || LiveTrainAPI.isStatic) return;
+      if (busy || LiveTrainAPI.isStatic || !configured) return;
       busy = true;
       el('authSubmit').disabled = true;
       error('');
@@ -39,23 +42,38 @@
         } else {
           const data = await request('email/send', { email });
           challenge = data;
-          render();
-          el('authEmailCode').focus();
+          if (isCurrent()) { render(); el('authEmailCode').focus(); }
         }
-      } catch (e) { error(e.message); }
-      finally { busy = false; if (el('authSubmit')) el('authSubmit').disabled = false; }
+      } catch (e) { if (isCurrent()) error(e.message); }
+      finally { busy = false; updateCountdown(); }
     };
     el('emailLoginForm').onsubmit = event => { event.preventDefault(); act(Boolean(challenge)); };
     if (challenge) {
+      const expiry = document.createElement('p'); expiry.id = 'authExpiry'; expiry.className = 'catalog-note';
+      el('authEmailCode').closest('label').after(expiry);
+      countdown = setInterval(updateCountdown, 1000);
       el('authResend').onclick = () => {
         if (Date.now() < new Date(challenge.retryAt).getTime()) { error('Please wait 60 seconds before requesting another code.'); return; }
         act(false);
       };
       el('authChange').onclick = () => { if (!busy) { challenge = null; render(); } };
     }
+    updateCountdown();
     if (LiveTrainAPI.isStatic) {
       el('authSubmit').disabled = true;
       error('Email sign-in is unavailable on this preview until the site owner connects the login service. No code has been sent.');
+    }
+  }
+  function updateCountdown() {
+    if (!el('authSubmit') || el('bookingModal').hidden) { clearInterval(countdown); return; }
+    const remaining = challenge ? Math.max(0, Math.ceil((new Date(challenge.expiresAt) - Date.now()) / 1000)) : 0;
+    el('authSubmit').disabled = busy || LiveTrainAPI.isStatic || !configured || Boolean(challenge && !remaining);
+    if (el('authExpiry')) el('authExpiry').textContent = remaining ? `Code expires in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : 'Code expired. Request a new code below.';
+    if (el('authResend')) {
+      const retry = Math.max(0, Math.ceil((new Date(challenge.retryAt) - Date.now()) / 1000));
+      el('authResend').disabled = busy || retry > 0 || !configured;
+      el('authResend').textContent = retry ? `Resend in ${retry}s` : 'Resend code';
+      el('authChange').disabled = busy;
     }
   }
   model.open = async () => {
@@ -64,14 +82,16 @@
     render();
     if (model.user || LiveTrainAPI.isStatic || busy) return;
     el('authSubmit').disabled = true;
+    const form = el('emailLoginForm');
     try {
       const config = await request('config');
-      if (attempt !== opening || el('bookingModal').hidden || !el('authSubmit')) return;
+      if (attempt !== opening || el('bookingModal').hidden || el('emailLoginForm') !== form) return;
+      configured = config.configured;
       challenge = config.pending;
       render();
       if (!config.configured) { el('authSubmit').disabled = true; error('Email sign-in is not available yet. Please contact the site owner.'); }
     } catch (e) {
-      if (attempt !== opening || !el('authError')) return;
+      if (attempt !== opening || el('bookingModal').hidden || el('emailLoginForm') !== form) return;
       error(e.message);
       const retry = document.createElement('button');
       retry.type = 'button'; retry.className = 'secondary-button'; retry.textContent = 'Retry connection';

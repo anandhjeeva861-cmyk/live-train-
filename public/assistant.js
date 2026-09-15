@@ -11,7 +11,7 @@
       <div class="assistant-suggestions" id="assistantSuggestions"></div>
       <div class="assistant-status" id="assistantStatus" role="status">Tap the microphone or type a message.</div>
       <form id="assistantForm" class="assistant-composer"><label class="sr-only" for="assistantInput">Message to Live Train assistant</label><textarea id="assistantInput" rows="2" maxlength="800" placeholder="Ask about your journey…"></textarea><div class="assistant-composer-actions"><button type="button" id="assistantMic" aria-label="Start microphone" aria-pressed="false">${micIcon}</button><span id="assistantMicLabel">Tap to speak</span><button type="button" id="assistantStop" hidden>Stop</button><button type="submit" id="assistantSend" aria-label="Send message">Send ↗</button></div></form>
-      <p class="assistant-privacy">Mic runs only when you tap. Your browser may process audio online. In AI mode, messages go to OpenAI. Train data is a demo.</p>
+      <p class="assistant-privacy">Mic runs only when you tap. Your browser may process audio online. In AI mode, messages go to OpenAI. Timetables are public snapshots; current services are unverified.</p>
     </section>`;
   document.body.append(wrapper);
   const el = id => document.getElementById(id);
@@ -98,7 +98,7 @@
       if (revision !== currentRevision) return null;
       await selectTrackingTrain(train); return 'tracking';
     }
-    if (action.kind === 'tourism' && state.stations.some(s => s.code === action.to)) { el('toStation').value = action.to; await loadSpots(); return 'tourism'; }
+    if (action.kind === 'tourism' && state.stations.some(s => s.code === action.to)) { el('toStation').value = action.to; await loadSpots({ stationOnly: true }); return 'tourism'; }
     if (action.kind === 'navigate' && action.target === 'bookings') { await loadBookings(); return 'bookings'; }
     throw new Error('That action is not supported. Please use the normal Live Train controls.');
   }

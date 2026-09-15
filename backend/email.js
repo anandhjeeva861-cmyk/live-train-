@@ -9,13 +9,13 @@ export function emailSetupIssues() {
 }
 export const emailConfigured = () => emailSetupIssues().length === 0;
 
-export async function sendLoginEmail(email, code) {
+export async function sendLoginEmail(email, code, challengeId) {
   if (!emailConfigured()) throw Object.assign(new Error('Email login is not configured. Please contact the site owner.'), { status: 503 });
   let response;
   try {
     response = await fetch('https://api.resend.com/emails', {
       method: 'POST', signal: AbortSignal.timeout(15000),
-      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY.trim()}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY.trim()}`, 'Content-Type': 'application/json', ...(challengeId && { 'Idempotency-Key': `login/${challengeId}` }) },
       body: JSON.stringify({ from: process.env.EMAIL_FROM.trim(), to: [email], subject: 'Your RailGo login code',
         text: `Your RailGo verification code is ${code}. It expires in 10 minutes. Do not share this code. If you did not request it, ignore this email.` }),
     });

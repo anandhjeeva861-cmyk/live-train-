@@ -1,12 +1,12 @@
 import { prisma } from './db.js';
 import { findTrain, trainDto } from './catalog.js';
-import { getLiveState, getSchedule } from '../public/shared/tracking.js';
 import { fail, production, requireAuth } from './auth.js';
 
 export const streams = new Map();
 const snapshotTimes = new Map();
 export async function liveSnapshot(train) {
-  if (production) throw fail(503, 'Live railway tracking provider is not configured.');
+  if (production || train.sourceId || process.env.NODE_ENV !== 'test') throw fail(503, 'Live railway tracking provider is not configured. This catalogue contains published timetables, not live positions. Check NTES for current running status.');
+  const { getLiveState, getSchedule } = await import('../tests/fixtures/tracking.js');
   const live = getLiveState(train);
   const previousIndex = train.route.findIndex(s => s.code === live.nextStationCode) - 1;
   const result = { ...live, trainNumber: live.trainNo, latitude: live.lat, longitude: live.lng,

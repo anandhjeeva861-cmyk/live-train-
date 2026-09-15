@@ -6,7 +6,8 @@ import { findTrain, trainInclude, stationDto, journeyDate } from './catalog.js';
 
 const include = { passengers: true, train: { include: trainInclude } };
 export function bookingDto(b) {
-  return { ...b, passengerDetails: b.passengers, passengers: b.passengers.length, status: b.bookingStatus,
+  const { requestKey, requestHash, reservations, ...booking } = b;
+  return { ...booking, passengerDetails: b.passengers, passengers: b.passengers.length, status: b.bookingStatus,
     trainNo: b.train.trainNumber, trainName: b.train.name, type: b.train.type,
     from: stationDto(b.train.originStation), to: stationDto(b.train.destinationStation),
     travelClass: b.classCode, fare: b.totalFare, coach: b.passengers[0]?.coach,
@@ -20,10 +21,21 @@ const schema = z.object({ trainId: z.string().min(1).max(80).optional(), trainNu
 export function registerBookings(app) {
   app.use('/api/bookings', requireAuth, (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   app.post('/api/bookings', async (req, res) => {
+    if (!(process.env.NODE_ENV === 'test' && process.env.RAILGO_TEST_FIXTURES === 'true')) throw fail(503, 'Railway reservations are not connected. Use the official IRCTC website to check fares, seats and book a valid ticket.');
     const input = schema.parse(req.body);
+    const requestKey = z.string().uuid().optional().parse(req.get('Idempotency-Key'));
+    const requestHash = crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
     if (!input.trainId && !input.trainNumber) throw fail(400, 'Choose a train.');
     const result = await writeTransaction(async tx => {
+      if (requestKey) {
+        const existing = await tx.booking.findUnique({ where: { userId_requestKey: { userId: req.user.id, requestKey } }, include });
+        if (existing) {
+          if (existing.requestHash !== requestHash) throw fail(409, 'This booking request was already used with different details. Start a new booking.');
+          return existing;
+        }
+      }
       const t = await findTrain(input.trainId || input.trainNumber, tx);
+      if (t.sourceId) throw fail(503, 'Reservations are unavailable for public timetable records. Book through IRCTC.');
       const c = t.classes.find(c => c.classCode === (input.classCode || input.travelClass || '').toUpperCase());
       if (!c) throw fail(400, 'Invalid class for selected train.');
       const inventory = await tx.journeyInventory.upsert({ where: { trainClassId_journeyDate: { trainClassId: c.id, journeyDate: input.journeyDate } },
@@ -44,6 +56,7 @@ export function registerBookings(app) {
       let pnr;
       do { pnr = String(crypto.randomInt(1_000_000_000, 10_000_000_000)); } while (await tx.booking.findUnique({ where: { pnr } }));
       return tx.booking.create({ data: { pnr, userId: req.user.id, trainId: t.id, journeyDate: input.journeyDate, classCode: c.classCode,
+        ...(requestKey && { requestKey, requestHash }),
         totalFare: c.fare * count,
         passengers: { create: input.passengers.map((p, i) => ({ ...p, coach, seatNumber: seats[i] })) },
         reservations: { create: seats.map(seatNumber => ({ inventoryId: inventory.id, seatNumber })) },

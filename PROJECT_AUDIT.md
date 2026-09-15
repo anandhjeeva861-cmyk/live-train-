@@ -1,5 +1,7 @@
 # RailGo project audit
 
+> Historical implementation log. The current review and verified behavior are in [PROJECT_STATUS.md](PROJECT_STATUS.md). Mobile OTP, fixed development codes and Google login described below have been removed; current login uses email OTP. Do not use the historical startup or authentication instructions below for the current version.
+
 ## Inspected architecture
 
 Express 5 serves an existing HTML/CSS/vanilla JavaScript application. `app.js` owns search, checkout, maps, weather and bookings; `design.js` owns the Vande Bharat dashboard and login modal; `tracking-ui.js` adds the fleet directory and map controls. The Tamil/English assistant and the separate GitHub Pages browser demo share catalog, command and simulation modules. Existing local images and responsive styles are retained.

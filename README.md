@@ -1,111 +1,60 @@
-# RailGo — booking, tracking and tourism
+# RailGo — public train routes and real places
 
-The existing Vande Bharat dashboard, HTML/CSS/JavaScript frontend, Leaflet maps, Tamil/English voice assistant and GitHub Pages demo are preserved. Express now serves Prisma/SQLite application data, browser sessions and transactional demo bookings.
+RailGo now uses **10,516 unique train numbers, 9,494 stations, 289,363 route entries and 5,142 photographed tourist places**. Search between intermediate stations, browse train numbers, inspect published schedules, filter attractions near every route station and open actual locations in Google Maps.
 
-For GitHub Pages, Vercel and persistent backend hosting, see [DEPLOYMENT.md](DEPLOYMENT.md). Vercel serves the static browser demo; the database backend needs persistent hosting.
+**These are public snapshots, not 10,516 verified current services.** 8,490 train records come from a dataset published September 15, 2025; 2,026 additional records come from a 2016 archive. Source dates are shown throughout the app. Check NTES before travel. See [DATA_SOURCES.md](DATA_SOURCES.md) for provenance, licensing and coverage.
 
-## Run locally
+## Start locally
 
-Requires Node.js **22.12+** (tested on Node 24) and npm. No PostgreSQL installation is needed. No mobile verification or Google account is required. Configure email delivery as described in AUTH_SETUP.md.
+Requires Node.js 22.12+ (tested with Node 24), npm and Windows, macOS or Linux. Python is needed only to rebuild the train snapshot.
 
 ```powershell
 npm install
 npm run dev
 ```
 
-After dependencies are installed, **`npm run dev` is the one-command startup**. It creates `.env` if needed, generates a private local session secret, generates Prisma Client, applies committed migrations, safely seeds missing catalog records, and starts Express with watching. It never resets bookings.
+Startup generates Prisma Client, applies migrations, imports the public catalogue, and starts Express. This workspace uses **http://localhost:4174**; use the address printed by startup. A new installation defaults to port 4173. Existing `.env`, accounts and tickets are preserved. Before replacing catalogue rows, the importer makes a SQLite backup under ignored `test-results/`. Imports are fingerprinted and repeated startup does not reset accounts.
 
-The default address is `http://localhost:4173`. **This workspace's local `.env` uses `http://localhost:4174` because another service already occupies 4173.** Use the address printed by startup. Change `PORT` and `FRONTEND_URL` together if choosing another port.
+The bundled data works without railway API credentials. The interface does not manufacture fares, seats, ratings, platforms, moving trains or tickets. Ticket actions link to IRCTC, and live status links to NTES. Existing legacy tickets remain in the database; they are not valid railway tickets.
 
-The equivalent explicit setup is:
+## Email OTP
 
-1. `npm install`
-2. `copy .env.example .env` — only if `.env` does not already exist; do not overwrite your credentials.
-3. `npx prisma generate`
-4. `npx prisma migrate dev`
-5. `npx prisma db seed`
-6. `npm run dev`
+The backend implements actual email OTP using Resend: random six-digit codes, HMAC storage, requesting-browser binding, 10-minute expiry, 5 attempts, 60-second resend cooldown, request limits, single use and session regeneration. The form shows expiry and resend countdowns. Provider requests include an idempotency key.
 
-For an already configured database, `npm start` runs the server without migrations or watching. Development bootstrap writes a random `SESSION_SECRET` only into ignored `.env`; it is never displayed. With direct `npm start` and no secret configured, development uses an ephemeral session signing secret, so sessions then expire on server restart.
+Configure `RESEND_API_KEY` and `EMAIL_FROM` privately in `.env`, using your verified sender domain. Run `npm run auth:check`, restart the backend and verify an email from your inbox. See [AUTH_SETUP.md](AUTH_SETUP.md). **This workspace has no Resend account configured. Live inbox delivery has not been tested.** Automated OTP tests intercept the provider only in the test process; the app has no fixed code or fake send fallback.
 
-## Email login and booking
+## Rebuild public data
 
-Configure Resend using [AUTH_SETUP.md](AUTH_SETUP.md), open `/login`, enter your email and verify the code from your inbox. Then search for a train and confirm a demo booking. Profile shows the signed-in email and supports logout.
+```powershell
+npm run data:trains
+npm run data:tourism
+npm run data:seed
+```
 
-Bookings are linked to the verified email, so signing in on another browser recovers the same account. Existing guest bookings are linked if the original guest cookie is still present. Mobile and Google login endpoints remain removed. Legacy database fields are retained without collecting a phone number.
-
-The Vercel/Pages static preview remains a labelled device-only demo. Connect it to the configured backend for real email authentication.
-
-## Data and inventory
-
-Prisma models: `User`, `OtpVerification`, `EmailVerification`, `Session`, `Station`, `Train`, `TrainStop`, `TrainClass`, `JourneyInventory`, `Booking`, `Passenger`, `SeatReservation`, `LiveTrainStatus`, `TouristSpot`.
-
-Seed data includes all **36 stations, 1,209 trains and 12 tourist spots** from the existing catalog. Named demo services include 12639 Brindavan Express, 12027 Chennai Bengaluru Shatabdi and TR101 South Heritage Tourism Special. Bengaluru has Lalbagh, Bangalore Palace, Cubbon Park and Nandi Hills. Local destination images provide fallbacks; a fallback may be illustrative.
-
-`TrainClass.totalSeats` and `availableSeats` describe the default class capacity. **Bookable remaining seats belong to `JourneyInventory`, keyed by train class and ISO journey date.** Search with `date` and the classes endpoint return this date's remaining inventory. Without a date, train listings show default capacity. Unique seat reservations, conditional decrements and transactions prevent duplicate seats and negative inventory. Cancellation is idempotent. Monetary demo fares are integer rupees. Journey dates are calendar strings validated against the current date in India, avoiding UTC date shifts.
-
-The database lives at `prisma/dev.db` by default and is ignored by Git. Schema and migrations are tracked. Prisma configuration follows the [Prisma 7 configuration and adapter architecture](https://docs.prisma.io/docs/guides/upgrade-prisma-orm/v7).
-
-For PostgreSQL later: change the Prisma datasource provider, replace the SQLite adapter in `backend/db.js` with the PostgreSQL adapter, configure `DATABASE_URL` privately, generate a **separate PostgreSQL migration history**, transfer data, and rerun integration/concurrency tests. SQLite migration SQL is not portable to PostgreSQL. Relations and application inventory logic are already separated from database setup.
+Raw downloads and photo metadata caches stay in ignored `data/sources/`. The train importer pins the reviewed Kaggle version/hash and DataMeet commit. The tourism importer uses Wikidata and Commons, expands beach/lake/garden and other categories in bounded queries, respects rate limits, caches metadata and excludes places without an attributed photograph. It can take several minutes. Restart the backend after rebuilding data so its in-memory index is refreshed.
 
 ## APIs
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/api/health` | Database/server health |
-| GET | `/api/auth/config` | Email setup status and pending browser challenge |
-| POST | `/api/auth/email/send` | Send code: `{ "email": "you@example.com" }` |
-| POST | `/api/auth/email/verify` | Verify code: `{ "email": "you@example.com", "code": "six digits from inbox" }` |
-| GET | `/api/auth/me` | Current browser profile |
-| POST | `/api/auth/logout` | Revoke session |
-| GET | `/api/stations?q=` | Station list/search |
-| GET | `/api/trains?from=MAS&to=SBC&date=2099-10-12&type=normal&class=CC` | Exact origin/destination search; no unrelated fallback |
-| GET | `/api/trains/catalog?q=Mumbai&type=all&offset=0&limit=8` | Paginated fleet directory |
-| GET | `/api/trains/:trainNumber` | Train detail; legacy IDs also supported |
-| GET | `/api/trains/:trainNumber/stops` | Ordered route/stops |
-| GET | `/api/trains/:trainNumber/classes?date=2099-10-12` | Date-specific availability and occupied seat numbers |
-| POST | `/api/bookings` | Authenticated transactional booking |
-| GET | `/api/bookings` | Own bookings |
-| GET | `/api/bookings/:pnr` | Own PNR |
-| PATCH | `/api/bookings/:pnr/cancel` | Cancel own demo ticket |
-| GET | `/api/tracking/:trainNumber` | Authenticated simulated telemetry |
-| GET | `/api/tracking/:trainNumber/stream` | Authenticated SSE, `live` events every 2.5 seconds |
-| GET | `/api/tourism?station=SBC&city=Bengaluru` | Destination places |
-| GET | `/api/tourism/:id` | Destination detail |
-| GET | `/api/weather?lat=12.97&lon=77.59` | Cached Open-Meteo weather |
-| GET / POST | `/api/assistant/status`, `/api/assistant` | Authenticated Tamil/English assistant |
+| Endpoint | Result |
+|---|---|
+| `GET /api/stations?q=Katpadi` | Station names/codes and known coordinates |
+| `GET /api/trains/search?from=KPD&to=SBC&limit=12` | Published routes containing the stations in that order |
+| `GET /api/trains/catalog?q=12639&source=kaggle-2025&offset=0&limit=8` | Paginated directory, optional source filter |
+| `GET /api/trains/12639` | Source metadata and full published station schedule |
+| `GET /api/trains/12639/stops` | Stops, source times, day, unknown platforms |
+| `GET /api/tourist-spots?train=12639&radiusKm=30&offset=0&limit=12` | Photographed places near route stations, attribution and Google Maps links |
+| `GET /api/tourist-spots?train=12639&station=KPD&radiusKm=100` | Attractions near one selected route station |
+| `GET /api/weather?lat=12.9&lng=77.5` | Open-Meteo weather or explicit unavailable result |
+| `GET /api/auth/config` | Delivery setup status and this browser's pending challenge |
+| `POST /api/auth/email/send` | Send a code with `{ "email": "you@example.com" }` |
+| `POST /api/auth/email/verify` | Verify `{ "email": "you@example.com", "code": "code from inbox" }` |
+| `GET /api/auth/me` | Signed-in account |
+| `POST /api/auth/logout` | Revoke the session |
+| `POST /api/assistant` | Tamil/English route, weather and tourism commands |
 
-Existing frontend aliases remain supported: `/api/trains/search`, `/api/trains/by-number/:number`, `/api/trains/:id/live`, `/api/trains/:id/live-stream`, `/api/tourist-spots`, `/api/bookings/pnr/:pnr`, and weather `lng`.
+Train search dates are validated but do not certify that an archived service runs on that date. Classes are empty for public records. Authenticated live-status and booking requests return 503 until their respective real providers are integrated; there is no synthetic fallback.
 
-Booking JSON example (demo data only):
-
-```json
-{
-  "trainNumber": "12639",
-  "journeyDate": "2099-10-12",
-  "classCode": "CC",
-  "seat": "S1",
-  "passengers": [{"name": "Demo Traveller", "age": 28, "gender": "other"}]
-}
-```
-
-## Tracking and weather
-
-Tracking is **development-only simulation, not live railway GPS**. The preserved shared engine uses Haversine segment distances, integrated acceleration/cruise/braking, station dwell periods, destination holds and repeating demo journeys. The demo restarts at the origin after its arrival hold; that reset is a new `journeyId`, not real train movement. Routes are illustrative station-to-station segments. Booking timetables and the continuous simulation clock are separate.
-
-One timer serves all SSE viewers of a train, stops when the final viewer leaves, and removes slow/disconnected clients. Train switching closes the old stream and clears route/POI layers. The frontend reconnects through EventSource and polls during outages. Normal updates move the marker without fitting the whole map. Database telemetry snapshots are refreshed at most every ten seconds per active train.
-
-Open-Meteo requests are coalesced and cached for ten minutes, including failures. The UI requests weather at most once per ten minutes while following the same train. Failures show unavailable values instead of fabricated weather and do not interrupt tracking. Map tiles, Google fonts and Leaflet's CDN need internet access.
-
-## Assistant and static hosting
-
-The existing **Ask Live Train** panel supports Tamil, English and Tanglish commands, text chat, browser speech recognition and speech synthesis. Try “Chennai to Bangalore tomorrow for two passengers”, “Track 12639”, “Weather in Bengaluru”, “Tourist spots near Mysuru”, or “Show my bookings”. Browser microphone and voice support still depend on your browser, permissions and installed voices.
-
-Basic commands work without an AI key. Optionally configure `OPENAI_API_KEY` and `OPENAI_MODEL` in local `.env` for the existing server-side AI integration. Never put credentials in `public/config.js`. Live application answers use database catalog records. The assistant does not perform booking, cancellation or payment mutations.
-
-GitHub Pages remains a **separate browser-only demo**, with localStorage tickets and simulated tracking. It cannot run Express, SQLite, real authentication or private AI calls. Run `npm run build:pages` after modifying `public/index.html`; the root `index.html` is generated. The hosted backend origin is configured in one place, `public/config.js` (`apiBase`). When it points to another origin, the browser opens that server's `/dashboard` and uses its frontend, API and session cookies together. This keeps browser session cookies on the backend origin.
-
-## Tests
+## Checks and hosting
 
 ```powershell
 npm run check
@@ -113,36 +62,10 @@ npm test
 npm run test:fullstack
 npm run test:browser
 npm run test:pages
+npm run test:vercel
 npm run security:secrets
-node scripts/check-secrets.js --history
-npm audit
 ```
 
-Backend tests use isolated SQLite databases and cover guest sessions, removed login endpoints, booking ownership, seat concurrency, tracking and session revocation. Browser tests cover direct access, booking persistence through refresh and restart, tracking, assistant actions and responsive layouts.
+Tests use separate SQLite files and test-only email delivery. Older booking/concurrency regression fixtures live exclusively under `tests/fixtures/`; production never seeds or serves them.
 
-Browser tests use installed Chrome/Edge, `BROWSER_PATH`, or Playwright Chromium (`npx playwright install chromium`). Speech and AI provider behavior are mocked in regression tests. Live AI billing/access and microphone hardware require their external services/devices. See `PROJECT_AUDIT.md` for executed results.
-
-## Production and secret safety
-
-Copy `.env.example` to `.env` only for initial setup. Add credentials **only** to local `.env`; never commit it. Set production secrets in the hosting provider's environment settings. Example credential fields are empty; no realistic fake credentials are provided.
-
-Production requires a strong SESSION_SECRET (or JWT_SECRET). Secure cookies require HTTPS. Set TRUST_PROXY=true only behind your trusted single reverse proxy.
-
-Remaining production integrations:
-
-- Authorized railway tracking, reservation/PNR and ticket-issuance providers. Production tracking returns 503 until a real provider is added.
-- Payment provider and verified webhooks for real payments. Current tickets/cancellations have no money movement and are not valid railway tickets.
-- Optional AI credentials; production hosting, backups, monitoring and PostgreSQL migration when needed.
-
-`security:secrets` checks tracked source **and new unignored files**, sensitive filenames and common credential patterns. `--history` checks reachable Git blobs too. It prints filename, line and category only, never detected values. This is a preventive pattern check, not a guarantee against every future secret format. Dependency overrides select patched `deepmerge-ts` and `mysql2` releases used by Prisma tooling; validated Prisma commands and tests pass with them.
-
-After all checks pass, review and push yourself:
-
-```powershell
-git status
-git add .
-git commit -m "Complete RailGo full-stack backend and database"
-git push
-```
-
-The existing `origin` remote is retained. No automatic commit, push, force-push or history rewrite is performed.
+Vercel and GitHub Pages can serve the public catalogue without a backend. Email login requires a persistent hosted Node/SQLite backend. [DEPLOYMENT.md](DEPLOYMENT.md) explains configuration. Regenerate the root Pages entry with `npm run build:pages` after changing `public/index.html`. No changes have been deployed remotely.

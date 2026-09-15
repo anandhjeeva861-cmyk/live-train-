@@ -25,9 +25,9 @@
     if (options.signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
     if (isStatic) {
       staticModule ||= import(new URL('./static-api.js', scriptBase).href);
-      const { requestDemo } = await staticModule;
+      const { requestStatic } = await staticModule;
       if (options.signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
-      const result = await requestDemo(path, options);
+      const result = await requestStatic(path, options);
       if (options.signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
       return result;
     }
@@ -44,11 +44,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     if (!isStatic) return;
     const note = document.createElement('p'); note.className = 'hosting-note';
-    note.textContent = 'Browser demo · Bookings stay on this device · Train locations are simulated';
+    note.textContent = 'Public timetable snapshot · Email login needs a hosted backend';
     document.querySelector('.topbar').after(note);
-    const description = document.querySelector('#bookings .section-heading p');
-    if (description) description.textContent = 'Your demo tickets are saved in this browser.';
-    const quickTrack = document.querySelector('.quick-track-card p');
-    if (quickTrack) quickTrack.textContent = 'Enter a train number or a demo PNR created on this device.';
   });
 })();

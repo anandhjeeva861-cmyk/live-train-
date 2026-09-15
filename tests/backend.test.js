@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { databaseEnvironment, readEmailCode } from './helpers.js';
 import { setTimeout as delay } from 'node:timers/promises';
+import crypto from 'node:crypto';
 
 test('RailGo database and API integration', { timeout: 180000 }, async t => {
-  Object.assign(process.env, databaseEnvironment('backend'));
+  Object.assign(process.env, databaseEnvironment('backend', { fixtures: true }));
   await import('./email-provider.fixture.js');
   const { app } = await import('../server.js');
   const { prisma } = await import('../backend/db.js');
@@ -100,7 +101,7 @@ test('RailGo database and API integration', { timeout: 180000 }, async t => {
       assert.equal((await a('/api/trains?date=2099-02-30')).status, 400);
       assert.equal((await a('/api/trains/12639/stops')).body.length, 4);
       const assistant = await a('/api/assistant', 'POST', { message: 'Chennai to Coimbatore tomorrow for two passengers' });
-      assert.equal(assistant.status, 200); assert.match(assistant.body.reply, /Coimbatore/);
+      assert.equal(assistant.status, 200); assert.equal(assistant.body.action.to, 'CBE'); assert.match(assistant.body.reply, /published routes/);
     });
     await t.test('passenger validation, transactional booking and PNR/list persistence', async () => {
       assert.equal((await a('/api/bookings', 'POST', { ...payload, passengers: 2 })).status, 400);
@@ -115,6 +116,27 @@ test('RailGo database and API integration', { timeout: 180000 }, async t => {
       assert.equal(await prisma.passenger.count(), 2);
       const classes = (await a(`/api/trains/12639/classes?date=${date}`)).body;
       assert.equal(classes.find(c => c.classCode === 'CC').availableSeats, 36);
+    });
+    await t.test('booking retries return one ticket, survive cancellation and remain scoped to the account', async () => {
+      const headers = { 'Idempotency-Key': crypto.randomUUID() };
+      const input = { ...payload, journeyDate: '2099-11-01' };
+      const before = await prisma.booking.count();
+      const results = await Promise.all(Array.from({ length: 4 }, () => a('/api/bookings', 'POST', input, headers)));
+      assert.ok(results.every(r => r.status === 201), JSON.stringify(results.map(r => r.body)));
+      assert.equal(new Set(results.map(r => r.body.pnr)).size, 1);
+      assert.equal(await prisma.booking.count(), before + 1);
+      const ticket = results[0].body;
+      assert.equal(ticket.requestKey, undefined);
+      const seats = (await a('/api/trains/12639/classes?date=2099-11-01')).body.find(c => c.classCode === 'CC');
+      assert.equal(seats.availableSeats, seats.totalSeats - 2);
+      assert.equal((await a('/api/bookings', 'POST', { ...input, seat: 'S4' }, headers)).status, 409);
+      assert.equal((await a('/api/bookings', 'POST', input, { 'Idempotency-Key': 'invalid' })).status, 400);
+      assert.equal((await b('/api/bookings', 'POST', input, headers)).status, 409, 'Another account cannot retrieve this ticket by its request key');
+      await a(`/api/bookings/${ticket.pnr}/cancel`, 'PATCH');
+      const replay = await a('/api/bookings', 'POST', input, headers);
+      assert.equal(replay.body.pnr, ticket.pnr);
+      assert.equal(replay.body.status, 'CANCELLED');
+      assert.equal(await prisma.booking.count(), before + 1);
     });
     await t.test('ownership isolation and cross-origin mutation rejection', async () => {
 

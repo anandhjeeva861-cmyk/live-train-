@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+export async function checkCatalogue(page) {
+ await page.waitForSelector('.train-card');
+ await page.locator('#quickTrackInput').fill('12639'); await page.locator('#quickTrackBtn').click();
+ await page.waitForFunction(() => document.querySelector('#trackingTrainName').textContent.includes('12639') && document.querySelectorAll('.spot-card').length > 0);
+ assert.match(await page.locator('#connectionBadge').innerText(),/Published timetable/);
+ assert.equal(await page.locator('#speedValue').innerText(),'—');
+ assert.ok(await page.locator('.catalog-stop').count() > 5);
+ assert.ok(await page.locator('#map .leaflet-overlay-pane svg').evaluate(svg => svg.getBoundingClientRect().width > 200), 'Global icon styles must not shrink route geometry');
+ assert.equal(await page.locator('[data-book]').count(),0);
+ assert.match(await page.locator('.source-notice').innerText(),/2016.*unverified/);
+ const href = await page.locator('.spot-card .spot-actions a').first().getAttribute('href');
+ const maps = new URL(href); assert.equal(maps.origin,'https://www.google.com'); assert.equal(maps.searchParams.get('api'),'1'); assert.ok(maps.searchParams.get('query'));
+ assert.equal(await page.locator('.spot-card .spot-actions a').first().getAttribute('target'),'_blank');
+ assert.ok(await page.locator('.spot-card .photo-credit').count() > 0);
+ await page.locator('#spotStation').selectOption('KPD'); await page.locator('#spotRadius').selectOption('100');
+ await page.waitForFunction(() => document.querySelector('#tourismSummary').textContent.includes('100 km') && [...document.querySelectorAll('.spot-card .spot-body p')].every(e => e.textContent.includes('(KPD)')));
+ await page.locator('#fleetQuery').fill('12639');
+ await page.waitForSelector('[data-fleet-id="12639"]');
+ await page.locator('#fleetQuery').fill('');
+ await page.waitForFunction(() => document.querySelector('#fleetCount').textContent.includes('10,516'));
+ await page.locator('#fleetNext').click();
+ await page.waitForFunction(() => document.querySelector('#fleetCount').textContent.includes('9–16'));
+ await page.setViewportSize({width:390,height:844});
+ await page.evaluate(() => window.scrollTo(0,0));
+ assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Mobile page must not overflow horizontally');
+ assert.ok(await page.locator('.spot-card').first().evaluate(card => card.querySelector('.spot-body').getBoundingClientRect().bottom <= card.getBoundingClientRect().bottom + 1), 'Mobile photo must not clip the place name and Google Maps links');
+ await page.setViewportSize({width:1440,height:1000});
+ await page.locator('#assistantLaunch').click(); await page.locator('#assistantVoice').click();
+ await page.locator('#assistantInput').fill('Track 12639'); await page.locator('#assistantSend').click();
+ await page.waitForFunction(() => document.querySelector('#assistantMessages').textContent.includes('Live tracking is unavailable'));
+ await page.locator('#assistantClose').click();
+}

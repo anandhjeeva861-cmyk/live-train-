@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import '../scripts/build-vercel.js';
 
-test('Vercel routes load browser assets and allow bookings without login', { timeout: 90000 }, async () => {
+test('Vercel routes load public data and keep unconfigured login unavailable', { timeout: 90000 }, async () => {
   const config = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
   const output = fileURLToPath(new URL(`../${config.outputDirectory}/`, import.meta.url));
   const app = express();
@@ -26,7 +26,7 @@ test('Vercel routes load browser assets and allow bookings without login', { tim
     page.on('request', request => { if (request.url().startsWith(origin + '/api/')) apiCalls.push(request.url()); });
     for (const route of ['/', ...config.rewrites.map(route => route.source)]) {
       await page.goto(origin + route, { waitUntil: 'domcontentloaded' });
-      await page.waitForFunction(() => document.querySelectorAll('.train-card').length === 2);
+      await page.waitForFunction(() => document.querySelectorAll('.train-card').length > 0);
       assert.equal(await page.evaluate(() => LiveTrainAPI.isStatic), true);
       assert.equal(await page.locator('#authPhone, #otpForm, #googleLogin, input[type="tel"]').count(), 0);
       if (route === '/login') {
@@ -35,12 +35,8 @@ test('Vercel routes load browser assets and allow bookings without login', { tim
         assert.match(await page.locator('#authError').innerText(), /No code has been sent/);
       }
     }
-    await page.locator('[data-book]').first().click();
-    await page.locator('.seat-button:not(.booked)').first().click();
-    await page.locator('#confirmBooking').click();
-    await page.waitForFunction(() => document.querySelector('#modalBody').textContent.includes('saved in this browser'));
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => document.querySelectorAll('.booking-item').length === 1);
+    assert.equal(await page.locator('[data-book]').count(), 0);
+    assert.ok(await page.locator('a[href="https://www.irctc.co.in/nget/train-search"]').count() > 0);
     assert.deepEqual(apiCalls, []);
     assert.deepEqual(failedAssets, []);
     assert.deepEqual(errors, []);

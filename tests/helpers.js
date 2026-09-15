@@ -3,10 +3,10 @@ import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 
-export function databaseEnvironment(prefix) {
+export function databaseEnvironment(prefix, { fixtures = false } = {}) {
   mkdirSync('test-results', { recursive: true });
   const env = { ...process.env, NODE_ENV: 'test', DATABASE_URL: `file:${path.resolve(`test-results/${prefix}-${crypto.randomUUID()}.db`).replaceAll('\\', '/')}`,
-    SESSION_SECRET: crypto.randomBytes(48).toString('base64url'), OPENAI_API_KEY: '',
+    RAILGO_TEST_FIXTURES: String(fixtures), SESSION_SECRET: crypto.randomBytes(48).toString('base64url'), OPENAI_API_KEY: '',
     RESEND_API_KEY: 'test-only', EMAIL_FROM: 'RailGo <login@example.test>',
     MAIL_TEST_OUTBOX: path.resolve(`test-results/mail-${crypto.randomUUID()}`) };
   writeFileSync(env.DATABASE_URL.slice(5), '');

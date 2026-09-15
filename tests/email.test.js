@@ -26,7 +26,8 @@ test('Resend rejection details stay private and delivery needs an acceptance ID'
   }
   globalThis.fetch = async (_url, options) => {
     assert.equal(JSON.parse(options.body).to[0], 'traveller@example.test');
+    assert.equal(options.headers['Idempotency-Key'], 'login/test-challenge');
     return new Response(JSON.stringify({ id: 'accepted-test-email' }), { status: 200 });
   };
-  await sendLoginEmail('traveller@example.test', '123456');
+  await sendLoginEmail('traveller@example.test', '123456', 'test-challenge');
 });

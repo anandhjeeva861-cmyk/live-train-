@@ -2,6 +2,7 @@ const weatherCache = new Map();
 const pending = new Map();
 
 export async function getWeatherData(lat, lng) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { current: null, hourly: {}, fallback: true, error: 'Station coordinates unavailable' };
   const key = `${lat.toFixed(1)},${lng.toFixed(1)}`;
   const cached = weatherCache.get(key);
   if (cached && Date.now() - cached.time < 10 * 60_000) return { ...cached.data, cached: true };

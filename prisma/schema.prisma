@@ -6,6 +6,11 @@ datasource db {
   provider = "sqlite"
 }
 
+model CatalogImport {
+  id          String @id
+  fingerprint String
+}
+
 model User {
   id             String   @id @default(cuid())
   mobileNumber   String   @unique
@@ -59,8 +64,10 @@ model Station {
   code        String @unique
   name        String
   city        String
-  latitude    Float
-  longitude   Float
+  latitude    Float?
+  longitude   Float?
+  state       String?
+  coordinateSource String?
   origins     Train[] @relation("Origin")
   destinations Train[] @relation("Destination")
   stops       TrainStop[]
@@ -77,10 +84,16 @@ model Train {
   type                 String
   originStationId      String
   destinationStationId String
-  departureTime        String
-  arrivalTime          String
-  duration             String
-  rating               Float @default(4.5)
+  departureTime        String?
+  arrivalTime          String?
+  duration             String?
+  rating               Float?
+  sourceId             String?
+  sourceDate           String?
+  historical           Boolean @default(false)
+  category             String?
+  runningDays          String?
+  distanceKm           Float?
   active               Boolean @default(true)
   originStation        Station @relation("Origin", fields: [originStationId], references: [id])
   destinationStation   Station @relation("Destination", fields: [destinationStationId], references: [id])
@@ -96,14 +109,15 @@ model TrainStop {
   trainId       String
   stationId     String
   stopOrder     Int
-  arrivalTime   String
-  departureTime String
-  platform      String
-  distanceKm    Float
+  arrivalTime   String?
+  departureTime String?
+  platform      String?
+  distanceKm    Float?
+  day           Int? @default(1)
+  isHalt        Boolean?
   train         Train @relation(fields: [trainId], references: [id], onDelete: Cascade)
   station       Station @relation(fields: [stationId], references: [id])
   @@unique([trainId, stopOrder])
-  @@unique([trainId, stationId])
   @@index([stationId])
 }
 
@@ -141,11 +155,14 @@ model Booking {
   totalFare     Int
   bookingStatus String @default("CONFIRMED")
   createdAt     DateTime @default(now())
+  requestKey    String?
+  requestHash   String?
   user          User @relation(fields: [userId], references: [id])
   train         Train @relation(fields: [trainId], references: [id])
   passengers    Passenger[]
   reservations  SeatReservation[]
   @@index([userId, createdAt])
+  @@unique([userId, requestKey])
   @@index([trainId, journeyDate, classCode, bookingStatus])
 }
 
@@ -194,15 +211,20 @@ model LiveTrainStatus {
 
 model TouristSpot {
   id          Int @id
-  stationId   String
+  stationId   String?
   name        String
   description String
   category    String
   imageUrl    String
   latitude    Float
   longitude   Float
-  distanceKm  Float
-  rating      Float
-  station     Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  distanceKm  Float?
+  rating      Float?
+  sourceUrl   String?
+  photoPage   String?
+  photoAuthor String?
+  photoLicense String?
+  photoLicenseUrl String?
+  station     Station? @relation(fields: [stationId], references: [id], onDelete: Cascade)
   @@index([stationId, category])
 }

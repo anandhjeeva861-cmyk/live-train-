@@ -1,4 +1,5 @@
 import { stations, trains, touristSpots } from './catalog.js';
+import { routeTourism, hasCoordinates } from './geography.js';
 
 const intents = ['search', 'track', 'weather', 'tourism', 'bookings', 'help', 'chat'];
 const stationAliases = {
@@ -84,7 +85,7 @@ export function parseCommand(message, today = indiaDate()) {
   }
   result.type = /tourism|tourist train|சுற்றுலா ரயில்/.test(text) ? 'tourism' : /normal|regular|சாதாரண/.test(text) ? 'normal' : null;
   result.trainNumber = message.match(/\b(?:TR\d{3}|\d{5}|\d{10})\b/i)?.[0]?.toUpperCase() || null;
-  const namedTrain = trains.find(t => text.includes(t.id) || text.includes(t.name.toLowerCase()));
+  const namedTrain = !result.trainNumber && trains.find(t => t.name?.trim().length >= 8 && text.includes(t.name.toLowerCase()));
   if (namedTrain) result.trainNumber = namedTrain.number;
   if (result.trainNumber && result.intent === 'chat') result.intent = 'track';
   return result;
@@ -98,7 +99,7 @@ export function validateIntent(value) {
 }
 
 const defaultCatalog = { trains, touristSpots };
-export function createAssistant({ getLiveState, getWeatherData, resolveIntent = null, getCatalog = null }) {
+export function createAssistant({ getWeatherData, resolveIntent = null, getCatalog = null }) {
   return async function answer({ message, language = 'en-IN', context = {}, history = [] }) {
     const { trains, touristSpots } = getCatalog ? await getCatalog() : defaultCatalog;
     const ta = language === 'ta-IN';
@@ -109,7 +110,7 @@ export function createAssistant({ getLiveState, getWeatherData, resolveIntent = 
       catch { notice = say('AI is temporarily unavailable. Using basic commands.', 'AI தற்போது கிடைக்கவில்லை. அடிப்படை கட்டளைகள் பயன்படுத்தப்படுகின்றன.'); }
     }
     const result = (reply, action = null) => ({ reply, action, mode, notice, language });
-    if (/\b(cancel|pay|refund|confirm booking|purchase)\b|ரத்து|பணம் செலுத்த|கட்டணம் செலுத்த|உறுதி செய்/i.test(message)) return result(say('I can help find trains and show your tickets. Complete bookings yourself in the seat selection screen; payments, cancellations and refunds are not available in this demo.', 'ரயில்களைத் தேடவும் டிக்கெட்டுகளைப் பார்க்கவும் உதவுவேன். இருக்கை தேர்வு திரையில் முன்பதிவை நீங்களே முடிக்கலாம். இந்த டெமோவில் பணம் செலுத்துதல், ரத்து, பணத்தைத் திரும்பப் பெறுதல் கிடையாது.'));
+    if (/\b(cancel|pay|refund|confirm booking|purchase)\b|ரத்து|பணம் செலுத்த|கட்டணம் செலுத்த|உறுதி செய்/i.test(message)) return result(say('I can help find trains and show your tickets. Use IRCTC to book, pay, cancel or request refunds for valid railway tickets.', 'ரயில்களைத் தேடவும் டிக்கெட்டுகளைப் பார்க்கவும் உதவுவேன். உண்மையான ரயில் டிக்கெட் முன்பதிவு, பணம் செலுத்துதல், ரத்து ஆகியவற்றிற்கு IRCTC பயன்படுத்தவும்.'));
     if (plan.intent === 'search') {
       const from = plan.from || context.from, to = plan.to || context.to;
       if (!knownStation(from) || !knownStation(to)) return result(say('Which stations? Try “Chennai to Bangalore tomorrow”. Available cities include Chennai, Bengaluru, Coimbatore, Mysuru, Madurai and Ooty.', 'எந்த நிலையங்கள்? “சென்னை முதல் பெங்களூரு நாளை ரயில்” என்று கேளுங்கள். சென்னை, பெங்களூரு, கோவை, மைசூர், மதுரை, ஊட்டி போன்ற நகரங்கள் உள்ளன.'));
@@ -121,33 +122,37 @@ export function createAssistant({ getLiveState, getWeatherData, resolveIntent = 
       const passengers = plan.passengers ?? context.passengers ?? 1;
       if (!Number.isInteger(passengers) || passengers < 1 || passengers > 6) return result(say('Choose between 1 and 6 passengers.', '1 முதல் 6 பயணிகள் வரை தேர்ந்தெடுக்கவும்.'));
       const type = plan.type || context.type || 'normal';
-      const matches = trains.filter(t => t.from.code === from && t.to.code === to && (type === 'all' || t.type === type));
-      const summary = matches.slice(0, 3).map(t => `${t.number} ${t.name}, ${t.departure}, ₹${Math.min(...Object.values(t.fare))}`).join('; ');
-      return result(say(matches.length ? `Found ${matches.length} demo trains from ${knownStation(from).city} to ${knownStation(to).city} for ${date}. ${summary}. Fares shown are starting prices per passenger; review and book below.` : 'No exact demo trains match that route and train type. Try another route or train type.', matches.length ? `${date} அன்று ${knownStation(from).city} முதல் ${knownStation(to).city} வரை ${matches.length} டெமோ ரயில்கள் உள்ளன. ${summary}. இவை ஒரு பயணிக்கான தொடக்கக் கட்டணங்கள். கீழே பார்த்து முன்பதிவு செய்யலாம்.` : 'இந்த வழித்தடம் மற்றும் ரயில் வகைக்கு டெமோ ரயில்கள் இல்லை. வேறு வழித்தடம் அல்லது வகையைத் தேர்ந்தெடுக்கவும்.'), { kind: 'search', from, to, date, passengers, type });
+        const matches = trains.filter(t => { const codes = t.route.map(s => s.code); return codes.includes(from) && codes.slice(codes.indexOf(from) + 1).includes(to); });
+        const summary = matches.slice(0, 3).map(t => `${t.number} ${t.name} (${t.sourceDate})`).join('; ');
+        return result(say(matches.length ? `Found ${matches.length} published routes. ${summary}. These are source snapshots, not confirmed services for ${date}. Check current schedules on NTES and book through IRCTC.` : 'No published route connects these stations in this direction.', matches.length ? `${matches.length} வெளியிடப்பட்ட ரயில் வழித்தடங்கள் கிடைத்தன. ${summary}. இவை பழைய தரவுத் தொகுப்புகள்; ${date} அன்று இயக்கம் உறுதி செய்யப்படவில்லை. தற்போதைய நேரத்தை NTES-ல் சரிபார்த்து IRCTC-ல் முன்பதிவு செய்யவும்.` : 'இந்தத் திசையில் நிலையங்களை இணைக்கும் வழித்தடம் கிடைக்கவில்லை.'), { kind: 'search', from, to, date, passengers, type: 'all' });
     }
     if (plan.intent === 'track') {
       // PNR lookup stays in the existing client/server flow and is not sent as booking history to AI.
-      if (plan.trainNumber && /^\d{10}$/.test(plan.trainNumber)) return result(say('Use the tracking lookup to check this demo PNR.', 'இந்த டெமோ PNR-ஐ கண்காணிப்பு தேடலில் சரிபார்க்கலாம்.'), { kind: 'pnr', pnr: plan.trainNumber });
+      if (plan.trainNumber && /^\d{10}$/.test(plan.trainNumber)) return result(say('Check this PNR on the official railway enquiry website; PNR lookup is not connected here.', 'இந்த PNR-ஐ அதிகாரப்பூர்வ ரயில்வே இணையதளத்தில் சரிபார்க்கவும்; இந்த app-ல் PNR provider இணைக்கப்படவில்லை.'), { kind: 'pnr', pnr: plan.trainNumber });
       const train = plan.trainNumber ? trains.find(t => t.number.toUpperCase() === plan.trainNumber.toUpperCase()) : trains.find(t => t.id === context.trainId);
       if (!train) return result(say('Tell me a supported train number, for example “Track 12639”.', 'ரயில் எண்ணைக் கூறுங்கள். உதாரணம்: “12639 ரயில் எங்கே?”'));
-      const live = await getLiveState(train);
-      return result(say(`${train.name} is travelling at ${live.speedKmph} kilometres per hour. Next station: ${live.nextStation}. Estimated destination arrival in ${live.etaMinutes} minutes. This is simulated tracking.`, `${train.name} மணிக்கு ${live.speedKmph} கிலோமீட்டர் வேகத்தில் செல்கிறது. அடுத்த நிலையம் ${live.nextStation}. சேரும் நிலையத்தை அடைய சுமார் ${live.etaMinutes} நிமிடங்கள். இது டெமோ கண்காணிப்பு.`), { kind: 'track', trainId: train.id });
+      return result(say(`${train.number} ${train.name}: the published route has ${train.route.length} stations. Source date: ${train.sourceDate}. Live tracking is unavailable; check current running status on NTES.`, `${train.number} ${train.name}: வெளியிடப்பட்ட வழித்தடத்தில் ${train.route.length} நிலையங்கள் உள்ளன. தரவு தேதி: ${train.sourceDate}. நேரடி கண்காணிப்பு இணைக்கப்படவில்லை; NTES-ல் தற்போதைய நிலையைச் சரிபார்க்கவும்.`), { kind: 'track', trainId: train.id });
     }
     if (plan.intent === 'weather') {
       const station = knownStation(plan.to || plan.from || context.to);
       if (!station) return result(say('Which supported city would you like the weather for?', 'எந்த நகரத்தின் வானிலை வேண்டும்?'));
+      if (!hasCoordinates(station)) return result(say('Coordinates are unavailable for that station, so weather cannot be requested.', 'இந்த நிலையத்தின் இருப்பிடத் தரவு இல்லை; வானிலையைப் பெற முடியவில்லை.'));
       const weather = await getWeatherData(station.lat, station.lng);
-      if (weather.fallback || !Number.isFinite(weather.current?.temperature_2m)) return result(say(`Live weather for ${station.city} is unavailable. The weather panel may show sample data; please check again later.`, `${station.city} நேரடி வானிலை தற்போது கிடைக்கவில்லை. வானிலை பகுதியில் மாதிரி தரவு இருக்கலாம். பிறகு முயற்சிக்கவும்.`));
+      if (weather.fallback || !Number.isFinite(weather.current?.temperature_2m)) return result(say(`Live weather for ${station.city} is unavailable. Please check again later.`, `${station.city} நேரடி வானிலை தற்போது கிடைக்கவில்லை. பிறகு முயற்சிக்கவும்.`));
       const c = weather.current;
       return result(say(`The current weather reading for ${station.city} is ${Math.round(c.temperature_2m)} degrees Celsius, feels like ${Math.round(c.apparent_temperature)} degrees, with wind at ${Math.round(c.wind_speed_10m)} kilometres per hour.`, `${station.city} தற்போதைய வெப்பநிலை ${Math.round(c.temperature_2m)} டிகிரி செல்சியஸ். உணரும் வெப்பநிலை ${Math.round(c.apparent_temperature)} டிகிரி. காற்றின் வேகம் மணிக்கு ${Math.round(c.wind_speed_10m)} கிலோமீட்டர்.`));
     }
     if (plan.intent === 'tourism') {
       const station = knownStation(plan.to || plan.from || context.to);
       if (!station) return result(say('Which destination would you like to explore?', 'எந்த நகரத்தின் சுற்றுலா இடங்களைப் பார்க்க விரும்புகிறீர்கள்?'));
+      if (touristSpots.some(s => s.sourceUrl)) {
+        const nearby = routeTourism(touristSpots, [station], { radiusKm: 30, limit: 3 });
+        return result(say(nearby.count ? `Found ${nearby.count} photographed places within 30 km of ${station.name}: ${nearby.spots.map(s => s.name).join(', ')}. Distances are straight-line; use Google Maps for directions.` : `No photographed places are currently indexed within 30 km of ${station.name}. Try a larger radius.`, nearby.count ? `${station.name} நிலையத்திலிருந்து 30 கி.மீ. சுற்றளவில் ${nearby.count} படங்களுடன் கூடிய இடங்கள் கிடைத்தன: ${nearby.spots.map(s => s.name).join(', ')}. வழிகாட்டலுக்கு Google Maps பயன்படுத்தவும்.` : 'இந்த நிலையத்தின் அருகில் படங்களுடன் கூடிய இடங்கள் கிடைக்கவில்லை. சுற்றளவை அதிகரித்துப் பார்க்கவும்.'), { kind: 'tourism', to: station.code });
+      }
       const spots = touristSpots.filter(s => s.city === station.city).slice(0, 3);
       return result(say(spots.length ? `Near ${station.city}: ${spots.map(s => `${s.name}, ${s.distanceKm} kilometres from the station`).join('; ')}. Distances are approximate.` : `No curated tourist spots are available for ${station.city} yet.`, spots.length ? `${station.city} அருகில்: ${spots.map(s => `${s.name}, நிலையத்திலிருந்து ${s.distanceKm} கிலோமீட்டர்`).join('; ')}. இவை தோராயமான தூரங்கள்.` : `${station.city} சுற்றுலா இடங்கள் இன்னும் சேர்க்கப்படவில்லை.`), { kind: 'tourism', to: station.code });
     }
-    if (plan.intent === 'bookings') return result(say('You can view your saved demo tickets in My Bookings.', 'உங்கள் சேமித்த டெமோ டிக்கெட்டுகளை My Bookings பகுதியில் பார்க்கலாம்.'), { kind: 'navigate', target: 'bookings' });
+    if (plan.intent === 'bookings') return result(say('Use My Bookings for the official IRCTC link. RailGo does not issue valid railway tickets.', 'உங்கள் ரயில் டிக்கெட்டுகளை IRCTC-ல் பார்க்கலாம். My Bookings பகுதியில் அதிகாரப்பூர்வ இணைப்பு உள்ளது.'), { kind: 'navigate', target: 'bookings' });
     if (mode === 'ai' && plan.intent === 'chat' && plan.reply.trim()) return result(plan.reply);
     return result(say('I can search trains, track a train, check destination weather and find tourist spots. Try “Chennai to Bangalore tomorrow”, “Track 12639”, or “Show my bookings”. Basic command mode is active; free-form AI chat requires the server AI connection.', 'ரயில் தேடல், கண்காணிப்பு, வானிலை, சுற்றுலா இடங்கள் பற்றி உதவுவேன். “சென்னை முதல் பெங்களூரு நாளை ரயில்”, “12639 ரயில் எங்கே”, “என் டிக்கெட்டுகள்” என்று கேளுங்கள். அடிப்படை கட்டளை முறை இயங்குகிறது. பொதுவான AI உரையாடலுக்கு சர்வர் AI இணைப்பு தேவை.'));
   };

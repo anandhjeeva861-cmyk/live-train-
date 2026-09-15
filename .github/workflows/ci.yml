@@ -24,6 +24,7 @@ jobs:
       - run: npm run test:fullstack
       - run: npm run test:browser
       - run: npm run test:pages
+      - run: npm run test:vercel
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { trains, stations } from '../public/shared/catalog.js';
-import { getLiveState, getSchedule } from '../public/shared/tracking.js';
-import { searchFleet } from '../public/shared/fleet-search.js';
+import { trains, stations } from './fixtures/catalog.js';
+import { getLiveState, getSchedule } from './fixtures/tracking.js';
+import { searchFleet } from './fixtures/fleet-search.js';
 
 test('fleet contains 1,209 unique, complete and trackable services', () => {
   assert.equal(trains.length, 1209);

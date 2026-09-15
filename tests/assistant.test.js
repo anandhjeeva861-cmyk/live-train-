@@ -2,11 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { createAssistant, parseCommand, modelIntent, registerAssistant } from '../assistant.js';
+import { readFileSync } from 'node:fs';
+import { trains } from '../public/shared/catalog.js';
 
 const context = { from: 'MAS', to: 'SBC', date: '2099-01-12', passengers: 1, type: 'normal', trainId: 'brindavan' };
 const deps = {
   getLiveState: () => ({ speedKmph: 92, nextStation: 'Katpadi', etaMinutes: 61 }),
-  getWeatherData: async () => ({ current: { temperature_2m: 28, apparent_temperature: 30, wind_speed_10m: 12 } })
+  getWeatherData: async () => ({ current: { temperature_2m: 28, apparent_temperature: 30, wind_speed_10m: 12 } }),
+  getCatalog: async () => ({ trains, touristSpots: JSON.parse(readFileSync(new URL('../public/data/tourist-spots.json', import.meta.url),'utf8')) })
 };
 const answer = createAssistant(deps);
 
@@ -18,11 +21,11 @@ test('Tamil, English and Tanglish search preserve route and relative date', () =
   const reverse = parseCommand('trains to Chennai from Bangalore');
   assert.equal(reverse.from, 'SBC'); assert.equal(reverse.to, 'MAS');
 });
-test('search action uses real demo fares and passenger count', async () => {
+test('search action uses sourced routes and passenger count without invented fares', async () => {
   const result = await answer({ message: 'Chennai to Bangalore for two passengers', context });
-  assert.equal(result.action.kind, 'search'); assert.equal(result.action.passengers, 2); assert.match(result.reply, /12639/); assert.match(result.reply, /₹190/); assert.equal(result.mode, 'commands');
+  assert.equal(result.action.kind, 'search'); assert.equal(result.action.passengers, 2); assert.match(result.reply, /published routes/); assert.doesNotMatch(result.reply, /₹|Infinity/); assert.equal(result.mode, 'commands');
   const tourism = await answer({ message: 'Find tourist trains from Chennai to Bangalore', context });
-  assert.equal(tourism.action.type, 'tourism'); assert.match(tourism.reply, /TR101/);
+  assert.equal(tourism.action.type, 'all'); assert.match(tourism.reply, /Check current schedules/);
 });
 test('unsupported destinations never fall back to the current form route', async () => {
   for (const message of ['Bangalore to Delhi train', 'from Mumbai to Chennai', 'Chennai to Mumbai tomorrow', 'சென்னை முதல் டெல்லி ரயில்']) {
@@ -34,25 +37,25 @@ test('same station, past/invalid dates and invalid passenger counts are rejected
     assert.equal((await answer({ message, context })).action, null, message);
   }
 });
-test('no matching route returns zero results without substituting trains', async () => {
+test('reverse route searches use published services', async () => {
   const result = await answer({ message: 'Bangalore to Chennai', context });
-  assert.match(result.reply, /No exact demo trains/); assert.equal(result.action.from, 'SBC'); assert.equal(result.action.to, 'MAS');
+  assert.match(result.reply, /published routes/); assert.equal(result.action.from, 'SBC'); assert.equal(result.action.to, 'MAS');
 });
-test('tracking is grounded in injected telemetry and explicitly simulated', async () => {
+test('public trains never use simulated telemetry', async () => {
   const result = await answer({ message: 'Track 12639', context });
-  assert.match(result.reply, /92 kilometres/); assert.match(result.reply, /Katpadi/); assert.match(result.reply, /simulated/); assert.equal(result.action.trainId, 'brindavan');
+  assert.doesNotMatch(result.reply, /92 kilometres|simulated/); assert.match(result.reply, /Live tracking is unavailable/); assert.equal(result.action.trainId, '12639');
   assert.equal((await answer({ message: 'Track 99999', context })).action, null);
 });
 test('Tamil replies and spoken passenger words are supported', async () => {
   const result = await answer({ message: 'சென்னை முதல் பெங்களூரு இரண்டு பேர் ரயில்', context, language: 'ta-IN' });
-  assert.equal(result.action.passengers, 2); assert.match(result.reply, /டெமோ/);
+  assert.equal(result.action.passengers, 2); assert.match(result.reply, /வெளியிடப்பட்ட/);
   assert.equal((await answer({ message: 'என் டிக்கெட்டுகள்', context, language: 'ta-IN' })).action.target, 'bookings');
 });
 test('tourism and weather use the requested destination', async () => {
   const places = await answer({ message: 'Tourist spots in Mysuru', context });
-  assert.equal(places.action.to, 'MYS'); assert.match(places.reply, /Mysore Palace/);
+  assert.equal(places.action.to, 'MYS'); assert.match(places.reply, /photographed places/);
   const weather = await answer({ message: 'Weather in Coimbatore', context });
-  assert.match(weather.reply, /Coimbatore/); assert.match(weather.reply, /28 degrees/);
+  assert.match(weather.reply, /Coimbatore/i); assert.match(weather.reply, /28 degrees/);
   for (const message of ['Weather in Delhi', 'Mumbai weather', 'Tourist spots near Mumbai']) {
     const unsupported = await answer({ message, context }); assert.equal(unsupported.action, null); assert.doesNotMatch(unsupported.reply, /28 degrees|Bengaluru/);
   }
@@ -79,7 +82,7 @@ test('AI request uses server credential and structured Responses output', async 
 test('AI outage and malformed output fall back to commands without leaking errors', async () => {
   for (const fetchImpl of [async () => { throw new Error('secret-provider-detail'); }, async () => ({ ok: true, json: async () => ({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: '{"intent":"delete"}' }] }] }) })]) {
     const result = await createAssistant({ ...deps, apiKey: 'test-only', fetchImpl })({ message: 'Track 12639', context, history: [] });
-    assert.equal(result.mode, 'commands'); assert.ok(result.notice); assert.equal(result.action.trainId, 'brindavan'); assert.doesNotMatch(JSON.stringify(result), /secret-provider-detail|test-only/);
+    assert.equal(result.mode, 'commands'); assert.ok(result.notice); assert.equal(result.action.trainId, '12639'); assert.doesNotMatch(JSON.stringify(result), /secret-provider-detail|test-only/);
   }
 });
 test('API validates payloads, bounds conversation roles and applies rate limiting', async () => {

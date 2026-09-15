@@ -1,0 +1,15 @@
+{
+  "retrievedAt": "2026-09-15T15:38:15.502Z",
+  "count": 5142,
+  "source": "https://www.wikidata.org/",
+  "coordinatesLicense": "CC0",
+  "photoSource": "https://commons.wikimedia.org/",
+  "query": "SELECT DISTINCT ?place ?placeLabel ?coord ?image ?kindLabel WHERE {\n VALUES ?kind { wd:Q33506 wd:Q23413 wd:Q44539 wd:Q842402 wd:Q16560 wd:Q22698 wd:Q34038 wd:Q473972 wd:Q16970 wd:Q4989906 wd:Q179700 wd:Q570116 wd:Q43501 wd:Q641226 wd:Q2977 wd:Q57821 }\n ?place wdt:P31 ?kind; wdt:P17 wd:Q668; wdt:P625 ?coord; wdt:P18 ?image.\n SERVICE wikibase:label { bd:serviceParam wikibase:language \"en\". }\n} LIMIT 15000",
+  "supplementaryQueries": [
+    "SELECT ?place ?placeLabel ?coord ?image ?kindLabel WHERE {\n { SELECT DISTINCT ?place ?coord ?image ?kind WHERE {\n VALUES ?kind { wd:Q40080 wd:Q167346 wd:Q46169 }\n ?place wdt:P17 wd:Q668; wdt:P31 ?kind; wdt:P625 ?coord; wdt:P18 ?image.\n } LIMIT 5000 }\n SERVICE wikibase:label { bd:serviceParam wikibase:language \"en\". }\n }",
+    "SELECT ?place ?placeLabel ?coord ?image ?kindLabel WHERE {\n { SELECT DISTINCT ?place ?coord ?image ?kind WHERE {\n VALUES ?kind { wd:Q35509 wd:Q23397 wd:Q12323 }\n ?place wdt:P17 wd:Q668; wdt:P31 ?kind; wdt:P625 ?coord; wdt:P18 ?image.\n } LIMIT 5000 }\n SERVICE wikibase:label { bd:serviceParam wikibase:language \"en\". }\n }",
+    "SELECT ?place ?placeLabel ?coord ?image ?kindLabel WHERE {\n { SELECT DISTINCT ?place ?coord ?image ?kind WHERE {\n VALUES ?kind { wd:Q839954 wd:Q207694 }\n ?place wdt:P17 wd:Q668; wdt:P31 ?kind; wdt:P625 ?coord; wdt:P18 ?image.\n } LIMIT 5000 }\n SERVICE wikibase:label { bd:serviceParam wikibase:language \"en\". }\n }",
+    "SELECT ?place ?placeLabel ?coord ?image ?kindLabel WHERE {\n { SELECT DISTINCT ?place ?coord ?image ?kind WHERE {\n VALUES ?kind { wd:Q8502 wd:Q4421 wd:Q54050 }\n ?place wdt:P17 wd:Q668; wdt:P31 ?kind; wdt:P625 ?coord; wdt:P18 ?image.\n } LIMIT 5000 }\n SERVICE wikibase:label { bd:serviceParam wikibase:language \"en\". }\n }"
+  ],
+  "coverage": "Selected photographed attractions in India. Not an exhaustive list. Photo credits and licenses accompany each record."
+}

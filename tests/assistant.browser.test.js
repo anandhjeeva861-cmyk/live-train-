@@ -1,4 +1,3 @@
-import { checkTracking } from './tracking-browser-checks.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -35,7 +34,6 @@ test('voice assistant: app actions, speech lifecycle, errors and responsive UI',
     });
     await page.goto(base, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.querySelectorAll('.train-card').length > 0);
-    await checkTracking(page);
     await page.locator('#assistantLaunch').click();
     await page.waitForFunction(() => document.getElementById('assistantMode').textContent.includes('Basic commands'));
     const send = async text => {
@@ -45,9 +43,9 @@ test('voice assistant: app actions, speech lifecycle, errors and responsive UI',
       return page.locator('.assistant-message.assistant p').last().innerText();
     };
     const reply = await send('Chennai to Coimbatore tomorrow for two passengers');
-    assert.match(reply, /Coimbatore/); assert.equal(await page.locator('#toStation').inputValue(), 'CBE'); assert.equal(await page.locator('#passengers').inputValue(), '2');
-    assert.equal(await page.locator('.train-card').count(), 2);
-    await send('Track 12639'); assert.match(await page.locator('#trackingTrainName').innerText(), /Brindavan/);
+    assert.match(reply, /published routes/); assert.equal(await page.locator('#toStation').inputValue(), 'CBE'); assert.equal(await page.locator('#passengers').inputValue(), '2');
+    assert.ok(await page.locator('.train-card').count() > 0);
+    await send('Track 12639'); assert.match(await page.locator('#trackingTrainName').innerText(), /BRINDAVAN/i);
     assert.match(await send('Weather in Delhi'), /Which supported city/);
     await page.locator('#assistantLanguage').selectOption('ta-IN');
     const tamil = await send('என் டிக்கெட்டுகள்'); assert.match(tamil, /டிக்கெட்டுகளை/);
@@ -58,7 +56,7 @@ test('voice assistant: app actions, speech lifecycle, errors and responsive UI',
     });
     await page.waitForFunction(() => document.querySelector('.assistant-message.user:last-of-type') || !document.getElementById('assistantSend').disabled);
     await page.waitForFunction(() => document.getElementById('assistantStatus').textContent.includes('அடுத்த'));
-    assert.match(await page.locator('.assistant-message.assistant p').last().innerText(), /டெமோ கண்காணிப்பு/);
+    assert.match(await page.locator('.assistant-message.assistant p').last().innerText(), /நேரடி கண்காணிப்பு இணைக்கப்படவில்லை/);
     assert.equal(await page.locator('#assistantMic').getAttribute('aria-pressed'), 'false');
     await page.locator('#assistantLanguage').selectOption('en-IN');
     await page.locator('#assistantMic').click();

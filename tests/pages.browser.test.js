@@ -1,128 +1,24 @@
-import { checkTracking } from './tracking-browser-checks.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { chromium } from 'playwright';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import '../scripts/stage-pages.js';
-
-test('GitHub Pages works under a repository path with no backend', { timeout: 90000 }, async () => {
-  const app = express();
-  const root = fileURLToPath(new URL('../dist/pages/', import.meta.url));
-  app.use('/live-train-', express.static(root));
-  app.use((_req, res) => res.status(404).send('No backend on this static host'));
-  const server = app.listen(0, '127.0.0.1');
-  await new Promise(resolve => server.once('listening', resolve));
-  let browser;
-  try {
-    const origin = `http://127.0.0.1:${server.address().port}`;
-    const url = `${origin}/live-train-/`;
-    const executablePath = process.env.BROWSER_PATH || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-    const errors = [], failedLocal = [], apiCalls = [];
-    page.on('pageerror', e => errors.push(e.message));
-    page.on('response', r => { if (r.url().startsWith(origin) && r.status() >= 400) failedLocal.push(r.url()); });
-    page.on('request', r => { if (r.url().startsWith(origin) && new URL(r.url()).pathname.startsWith('/api/')) apiCalls.push(r.url()); });
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => document.querySelectorAll('.train-card').length === 2);
-    await checkTracking(page);
-    assert.match(await page.title(), /^Live Train/);
-    assert.match(await page.locator('.hosting-note').innerText(), /Bookings stay on this device/);
-    assert.equal(await page.locator('body').evaluate(e => getComputedStyle(e).margin), '0px');
-    await page.waitForFunction(() => Number(document.getElementById('speedValue').textContent) > 0);
-    assert.match(await page.locator('#connectionBadge').innerText(), /Browser simulation/);
-    assert.match(await page.locator('#bookingList').innerText(), /No demo bookings/);
-    await page.locator('.brand').click(); assert.equal(page.url(), url);
-    await page.locator('[data-book]').first().click();
-    await page.locator('.seat-button:not(.booked)').first().click();
-    await page.locator('#confirmBooking').click();
-    await page.waitForFunction(() => document.querySelector('#modalBody').textContent.includes('saved in this browser'));
-    const pnr = (await page.locator('#modalBody').innerText()).match(/\b\d{10}\b/)[0];
-    await page.locator('#modalClose').click();
-    assert.equal(await page.locator('.booking-item').count(), 1);
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => document.querySelectorAll('.booking-item').length === 1);
-    await page.locator('#quickTrackInput').fill(pnr); await page.locator('#quickTrackBtn').click();
-    await page.waitForFunction(() => document.getElementById('trackingTrainName').textContent.includes('Brindavan'));
-    assert.equal(await page.locator('#quickTrackError').innerText(), '');
-    await page.locator('#assistantLaunch').click();
-    await page.waitForFunction(() => document.getElementById('assistantMode').textContent.includes('Basic commands'));
-    await page.locator('#assistantVoice').click();
-    await page.locator('#assistantLanguage').selectOption('ta-IN');
-    await page.locator('#assistantInput').fill('சென்னை முதல் கோவை நாளை ரயில்');
-    await page.locator('#assistantSend').click();
-    await page.waitForFunction(() => !document.getElementById('assistantSend').disabled && document.getElementById('toStation').value === 'CBE');
-    assert.match(await page.locator('.assistant-message.assistant p').last().innerText(), /டெமோ ரயில்கள்/);
-    await page.locator('#assistantClose').click();
-    await page.locator('#toStation').selectOption('SBC');
-    await page.locator('#searchBtn').click();
-    await page.waitForFunction(() => document.querySelectorAll('.train-card').length === 2 && document.querySelector('.train-card').textContent.includes('Brindavan'));
-    await page.locator('#swapBtn').click(); await page.locator('#searchBtn').click();
-    await page.waitForFunction(() => document.getElementById('trainList').textContent.includes('No exact trains'));
-    await page.locator('#swapBtn').click(); await page.locator('#searchBtn').click();
-    await page.waitForFunction(() => document.querySelectorAll('.train-card').length === 2);
-    await page.locator('.booking-tab[data-type="tourism"]').click();
-    await page.waitForFunction(() => document.querySelectorAll('.train-card').length === 1 && document.querySelector('.train-card').textContent.includes('South Heritage'));
-    await page.locator('.booking-tab[data-type="normal"]').click();
-    await page.evaluate(() => scrollTo(0, 0));
-    await page.waitForFunction(() => [...document.querySelectorAll('#destinationPreview img')].length === 3 && [...document.querySelectorAll('#destinationPreview img')].every(i => i.complete && i.naturalWidth > 0));
-    mkdirSync('test-results', { recursive: true });
-    await page.screenshot({ path: 'test-results/pages-desktop.png' });
-    for (const width of [360, 390, 768, 1024]) {
-      await page.setViewportSize({ width, height: 844 });
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `overflow at ${width}`);
-    }
-    await page.setViewportSize({ width: 390, height: 844 }); await page.screenshot({ path: 'test-results/pages-mobile.png' });
-    await page.locator('.site-footer a').click();
-    assert.match(page.url(), /\/live-train-\/public\/photo-credits.html$/);
-    await page.getByRole('link', { name: /Back to Live Train/ }).click();
-    assert.equal(page.url(), url);
-    assert.deepEqual(apiCalls, [], 'Static demo must not request nonexistent /api endpoints');
-    assert.deepEqual(failedLocal, [], 'All repository-relative assets must load');
-    assert.deepEqual(errors, []);
-    // A configured backend must own login cookies; don't attempt cross-site session fetches.
-    await page.route('**/public/config.js', route => route.fulfill({ contentType: 'application/javascript', body: "window.LIVE_TRAIN_CONFIG = { apiBase: 'https://railgo.example.test' };" }));
-    await page.route('https://railgo.example.test/login', route => route.fulfill({ contentType: 'text/html', body: '<h1>Hosted RailGo login</h1>' }));
-    await page.goto(url, { waitUntil: 'commit' });
-    await page.waitForURL('https://railgo.example.test/login');
-    assert.equal(await page.locator('h1').innerText(), 'Hosted RailGo login');
-  } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
-});
-
-
-test('Vercel artifact loads direct routes without login or backend requests', { timeout: 90000 }, async () => {
-  await import('../scripts/build-vercel.js');
-  const { readFile } = await import('node:fs/promises');
-  const config = JSON.parse(await readFile('vercel.json', 'utf8'));
-  const root = fileURLToPath(new URL('../' + config.outputDirectory + '/', import.meta.url));
-  const app = express();
-  app.use(express.static(root));
-  for (const rule of config.rewrites) app.get(rule.source, (_req, res) => res.sendFile(root + 'index.html'));
-  const server = app.listen(0, '127.0.0.1');
-  await new Promise(resolve => server.once('listening', resolve));
-  let browser;
-  try {
-    const executablePath = process.env.BROWSER_PATH || ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-    const origin = 'http://127.0.0.1:' + server.address().port;
-    const errors = [];
-    page.on('pageerror', e => errors.push(e.message));
-    page.on('response', r => { if (r.url().startsWith(origin) && r.status() >= 400) errors.push(r.url()); });
-    page.on('request', r => { if (r.url().startsWith(origin + '/api/')) errors.push(r.url()); });
-    for (const route of ['/', ...config.rewrites.map(r => r.source)]) {
-      await page.goto(origin + route);
-      await page.waitForFunction(() => document.querySelectorAll('.train-card').length === 2);
-      assert.equal(await page.locator('#authPhone, #otpForm, #googleLogin, #googleDemo').count(), 0);
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-    }
-    await page.locator('#mobileProfile').click();
-    assert.equal(await page.locator('#mobileProfile small').innerText(), 'Email login');
-    assert.equal(await page.locator('#authEmail').isVisible(), true);
-    assert.equal(await page.locator('#authSubmit').isDisabled(), true);
-    assert.match(await page.locator('#authError').innerText(), /No code has been sent/);
-    assert.deepEqual(errors, []);
-  } finally { await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+import { checkCatalogue } from './catalog-browser-checks.js';
+test('public catalogue and route tourism work on GitHub Pages under a repository path', {timeout:90000}, async t => {
+ const app = express(); app.use('/live-train-',express.static(fileURLToPath(new URL('../dist/pages/',import.meta.url))));
+ const server = app.listen(0,'127.0.0.1'); await new Promise(resolve => server.once('listening',resolve));
+ let browser;
+ t.after(async () => { await browser?.close(); await new Promise(resolve => server.close(resolve)); });
+ const executablePath = process.env.BROWSER_PATH || ['C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
+ browser = await chromium.launch({headless:true,...(executablePath && {executablePath})});
+ const page = await browser.newPage({viewport:{width:1440,height:1000}}); page.setDefaultTimeout(20000);
+ const origin = `http://127.0.0.1:${server.address().port}`, errors = [], failed = [];
+ page.on('pageerror',e => errors.push(e.message)); page.on('response',r => {if(r.url().startsWith(origin) && r.status() >= 400) failed.push(r.url());});
+ await page.goto(origin+'/live-train-/',{waitUntil:'domcontentloaded'});
+ await checkCatalogue(page);
+ await page.locator('#profileBtn').click(); assert.ok(await page.locator('#authSubmit').isDisabled());
+ assert.match(await page.locator('#authError').innerText(),/No code has been sent/);
+ assert.deepEqual(errors,[]); assert.deepEqual(failed,[]);
 });

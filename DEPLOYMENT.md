@@ -4,9 +4,9 @@
 
 vercel.json selects the Other framework, runs npm run build:vercel and publishes dist/vercel. The build copies browser assets to the output root and uses an absolute base path, so direct dashboard, booking and tracking URLs resolve assets correctly. Trailing slash URLs are normalized. The install command skips dependency lifecycle scripts because the static build does not use Prisma or native SQLite bindings.
 
-Run npm run build:vercel to check the artifact. Run npm run test:vercel to verify the generated frontend at every configured route, including login-free booking and reload persistence. This test uses a local static server with the configured rewrites; it does not deploy to Vercel. Redeploy the project from Vercel to publish these changes. Remote deployment has not been performed by this local edit. See [Vercel configuration](https://vercel.com/docs/project-configuration/vercel-json).
+Run npm run build:vercel to check the artifact. Run npm run test:vercel to verify public catalogue data and unavailable email login at every configured route. This test uses a local static server with the configured rewrites; it does not deploy to Vercel. Remote deployment has not been performed by this local edit. See [Vercel configuration](https://vercel.com/docs/project-configuration/vercel-json).
 
-This is the labelled browser demo: bookings stay on the device and tracking is simulated. It requires no OTP or Google login. The local SQLite backend is not deployed as a Vercel Function; [Vercel SQLite guidance](https://vercel.com/kb/guide/is-sqlite-supported-in-vercel) explains the storage limitation.
+This is the public catalogue snapshot: route searches, attributed photographs and Google Maps links work without login. It does not simulate bookings or moving trains. The local SQLite backend is not deployed as a Vercel Function; [Vercel SQLite guidance](https://vercel.com/kb/guide/is-sqlite-supported-in-vercel) explains the storage limitation.
 
 ## GitHub Pages
 
@@ -16,11 +16,11 @@ Run npm run build:pages after editing public/index.html. Root index.html remains
 
 render.yaml describes an optional paid Node service with a persistent disk. No service is provisioned by editing the file. It generates Prisma during build, applies migrations and seeds the database at startup. The backend uses Render's RENDER_EXTERNAL_URL automatically. Set FRONTEND_URL only if using a custom domain. The blueprint provides SESSION_SECRET, DATABASE_URL and TRUST_PROXY. No Twilio or Google credentials are needed.
 
-Set RESEND_API_KEY and EMAIL_FROM privately on the backend as described in AUTH_SETUP.md. Verified email accounts own bookings; keep the database and session secret across deployments. Verify /api/health and make a demo booking, then confirm it survives a restart. Use one SQLite app instance and back up the disk.
+Set RESEND_API_KEY and EMAIL_FROM privately on the backend as described in AUTH_SETUP.md. Keep the database and session secret across deployments. Verify /api/health and actual inbox OTP delivery, then confirm the account survives a restart. The catalogue importer preserves accounts and existing tickets, backs up the database and replaces unowned mock records. Use one SQLite app instance and back up the persistent disk.
 
 Set RAILGO_BACKEND_URL to the backend's public HTTPS origin in Vercel environment variables and in GitHub repository Actions variables. The build generates the public config; no credential is copied. Set RAILGO_REQUIRE_EMAIL_LOGIN=true so a missing backend URL fails the build. Visitors open the backend's /login; supported booking/tracking routes are preserved. Leave the URL empty only for the standalone static preview.
 
-Production railway tracking still needs an authorized feed. Bookings are demo reservations, not issued railway tickets.
+Live railway tracking and ticket issuing need authorized providers. Public timetable records show no fabricated fares, inventory or live positions. Ticket actions open IRCTC and status actions open NTES. See DATA_SOURCES.md for archive dates and coverage.
 
 
 ## Publish email login from this repository

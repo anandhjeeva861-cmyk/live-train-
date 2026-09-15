@@ -2,6 +2,10 @@ import { prisma } from './db.js';
 import { fail } from './auth.js';
 import { z } from 'zod';
 import { indiaDate, validDate } from '../public/shared/assistant-core.js';
+import { searchCatalog } from '../public/shared/catalog.js';
+import { routeTourism, googleMapsUrl } from '../public/shared/geography.js';
+import { readFileSync } from 'node:fs';
+export const publicSpots = JSON.parse(readFileSync(new URL('../public/data/tourist-spots.json', import.meta.url), 'utf8'));
 
 export const trainInclude = { originStation: true, destinationStation: true, stops: { include: { station: true }, orderBy: { stopOrder: 'asc' } }, classes: true };
 export async function loadTrains(where = { active: true }, offset = 0, limit = null) {
@@ -19,10 +23,11 @@ export async function loadTrains(where = { active: true }, offset = 0, limit = n
 export const stationDto = s => ({ ...s, lat: s.latitude, lng: s.longitude });
 export function trainDto(t) {
   return { ...t, number: t.trainNumber, from: stationDto(t.originStation), to: stationDto(t.destinationStation),
-    departure: t.departureTime, arrival: t.arrivalTime,
-    fare: Object.fromEntries(t.classes.map(c => [c.classCode, c.fare])),
-    seats: Object.fromEntries(t.classes.map(c => [c.classCode, c.availableSeats])),
-    route: t.stops.map(s => ({ ...stationDto(s.station), stopOrder: s.stopOrder, arrivalTime: s.arrivalTime, departureTime: s.departureTime, platform: s.platform, distanceKm: s.distanceKm })),
+    departure: t.departureTime, arrival: t.arrivalTime, runningDays: t.runningDays ? JSON.parse(t.runningDays) : null,
+    bookingAvailable: !t.sourceId && process.env.NODE_ENV === 'test', liveAvailable: !t.sourceId && process.env.NODE_ENV === 'test',
+    fare: t.sourceId ? {} : Object.fromEntries(t.classes.map(c => [c.classCode, c.fare])),
+    seats: t.sourceId ? {} : Object.fromEntries(t.classes.map(c => [c.classCode, c.availableSeats])),
+    route: t.stops.map(s => ({ ...stationDto(s.station), stopOrder: s.stopOrder, arrivalTime: s.arrivalTime, departureTime: s.departureTime, day: s.day, isHalt: s.isHalt, platform: s.platform, distanceKm: s.distanceKm })),
   };
 }
 export const journeyDate = z.string().refine(value => validDate(value) && value >= indiaDate(), 'Choose today or a valid future date in India.');
@@ -31,7 +36,7 @@ export async function findTrain(number, db = prisma) {
   if (!t) throw fail(404, 'Train not found.');
   return t;
 }
-export const spotDto = s => ({ ...s, city: s.station.city, image: s.imageUrl, lat: s.latitude, lng: s.longitude, distance: s.distanceKm });
+export const spotDto = s => ({ ...s, city: s.station?.city || '', image: s.imageUrl, lat: s.latitude, lng: s.longitude, distance: s.distanceKm, mapsUrl: googleMapsUrl(s) });
 
 export function registerCatalog(app) {
   app.get('/api/stations', async (req, res) => {
@@ -41,9 +46,11 @@ export function registerCatalog(app) {
   app.get(['/api/trains', '/api/trains/search', '/api/trains/catalog'], async (req, res) => {
     const query = z.object({ from: z.string().max(10).optional(), to: z.string().max(10).optional(), date: journeyDate.optional(),
       type: z.enum(['all', 'normal', 'tourism']).default('all'), class: z.string().max(10).optional(), q: z.string().max(100).default(''),
+      source: z.enum(['kaggle-2025', 'datameet-2016']).optional(),
       offset: z.coerce.number().int().min(0).max(100000).default(0), limit: z.coerce.number().int().min(1).max(50).default(12) }).parse(req.query);
     const directory = req.path.endsWith('/catalog');
     if ((query.from && !query.to) || (!query.from && query.to) || (query.from && query.from === query.to)) throw fail(400, 'Choose different origin and destination stations.');
+    if (!(process.env.NODE_ENV === 'test' && process.env.RAILGO_TEST_FIXTURES === 'true')) return res.json(searchCatalog(query));
     const where = { active: true, ...(query.type !== 'all' && { type: query.type }),
       ...(query.from && { originStationId: query.from.toUpperCase(), destinationStationId: query.to.toUpperCase() }),
       ...(query.class && { classes: { some: { classCode: query.class.toUpperCase() } } }),
@@ -60,15 +67,21 @@ export function registerCatalog(app) {
   app.get('/api/trains/:number/stops', async (req, res) => res.json(trainDto(await findTrain(req.params.number)).route));
   app.get('/api/trains/:number/classes', async (req, res) => {
     const train = await findTrain(req.params.number);
+    if (train.sourceId) return res.json([]);
     const date = journeyDate.parse(req.query.date || indiaDate());
     const inventories = await prisma.journeyInventory.findMany({ where: { journeyDate: date, trainClassId: { in: train.classes.map(c => c.id) } }, include: { reservations: true } });
     res.json(train.classes.map(c => { const inv = inventories.find(i => i.trainClassId === c.id); return { ...c, availableSeats: inv?.availableSeats ?? c.totalSeats, bookedSeats: inv?.reservations.map(s => s.seatNumber) || [] }; }));
   });
   app.get('/api/trains/:number', async (req, res) => res.json(trainDto(await findTrain(req.params.number))));
   app.get(['/api/tourism', '/api/tourist-spots'], async (req, res) => {
+    if (req.query.train || (req.query.station && !(process.env.NODE_ENV === 'test' && process.env.RAILGO_TEST_FIXTURES === 'true'))) {
+      const options = z.object({ train: z.string().max(20).optional(), station: z.string().max(10).optional(), radiusKm: z.coerce.number().min(1).max(100).default(30), offset: z.coerce.number().int().min(0).max(50000).default(0), limit: z.coerce.number().int().min(1).max(50).default(24) }).parse(req.query);
+      const route = options.train ? trainDto(await findTrain(options.train)).route : (await prisma.station.findMany({ where: { code: options.station.toUpperCase() } })).map(stationDto);
+      return res.json(routeTourism(publicSpots, route, { ...options, stationCode: options.station?.toUpperCase() }));
+    }
     const query = z.object({ station: z.string().max(10).optional(), city: z.string().max(100).optional() }).parse(req.query);
     const spots = await prisma.touristSpot.findMany({ where: { ...(query.station && { stationId: query.station.toUpperCase() }) }, include: { station: true } });
-    res.json(spots.filter(s => !query.city || s.station.city.toLowerCase() === query.city.toLowerCase()).map(spotDto));
+    res.json(spots.filter(s => !query.city || s.station?.city.toLowerCase() === query.city.toLowerCase()).map(spotDto));
   });
   app.get('/api/tourism/:id', async (req, res) => {
     const id = z.coerce.number().int().positive().parse(req.params.id);

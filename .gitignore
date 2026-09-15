@@ -21,5 +21,6 @@ logs/
 *.log
 coverage/
 dist/
+data/sources/
 build/
 .DS_Store
