@@ -19,9 +19,9 @@ The bundled data works without railway API credentials. The interface does not m
 
 ## Email OTP
 
-The backend implements actual email OTP using Resend: random six-digit codes, HMAC storage, requesting-browser binding, 10-minute expiry, 5 attempts, 60-second resend cooldown, request limits, single use and session regeneration. The form shows expiry and resend countdowns. Provider requests include an idempotency key.
+The backend implements email OTP through Gmail SMTP or Resend: random six-digit codes, HMAC storage, requesting-browser binding, 10-minute expiry, 5 attempts, 60-second resend cooldown, request limits, single use and session regeneration. The form shows expiry and resend countdowns. Resend requests include an idempotency key.
 
-Configure `RESEND_API_KEY` and `EMAIL_FROM` privately in `.env`, using your verified sender domain. Run `npm run auth:check`, restart the backend and verify an email from your inbox. See [AUTH_SETUP.md](AUTH_SETUP.md). **This workspace has no Resend account configured. Live inbox delivery has not been tested.** Automated OTP tests intercept the provider only in the test process; the app has no fixed code or fake send fallback.
+Run `npm run auth:setup` for the local Gmail setup page. It verifies your sender using a Google App Password and saves email settings privately in `.env`. Alternatively configure `EMAIL_PROVIDER=resend`, `RESEND_API_KEY` and `EMAIL_FROM` with a verified sender domain. Run `npm run auth:check` and verify an email from your inbox. See [AUTH_SETUP.md](AUTH_SETUP.md). **Neither sender account is configured yet; actual inbox delivery remains unverified.** Automated OTP tests intercept the provider only in the test process; the app has no fixed code or fake send fallback. The Vercel website also needs the persistent backend and `RAILGO_BACKEND_URL`; local sender setup does not change the live deployment.
 
 ## Rebuild public data
 

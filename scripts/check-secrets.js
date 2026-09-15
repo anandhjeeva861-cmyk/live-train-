@@ -19,7 +19,7 @@ function report(file, line, category) { findings++; console.error(`${file}:${lin
 export function scanText(file, content) {
   content.split(/\r?\n/).forEach((line, index) => {
     for (const [category, pattern] of patterns) if (pattern.test(line)) report(file, index + 1, category);
-    const assignment = line.match(/\b(?:[A-Z_]*API_(?:SECRET|KEY)|JWT_SECRET|SESSION_SECRET|GOOGLE_CLIENT_SECRET|TWILIO_AUTH_TOKEN|AWS_SECRET_ACCESS_KEY|SMS_API_SECRET)\b["']?\s*[:=]\s*(.*)/);
+    const assignment = line.match(/\b(?:[A-Z_]*API_(?:SECRET|KEY)|JWT_SECRET|SESSION_SECRET|GOOGLE_CLIENT_SECRET|TWILIO_AUTH_TOKEN|AWS_SECRET_ACCESS_KEY|SMS_API_SECRET|SMTP_PASS)\b["']?\s*[:=]\s*(.*)/);
     if (!assignment) return;
     const raw = assignment[1].trim();
     if (/\.(?:m?js|ts)$/.test(file) && /^[$A-Z_a-z][$\w]*\s*(?:[,;}].*)?$/.test(raw)) return; // JavaScript identifier supplied by the caller, not a literal credential.

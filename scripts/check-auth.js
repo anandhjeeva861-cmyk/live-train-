@@ -1,14 +1,14 @@
 import 'dotenv/config';
-import { emailSetupIssues } from '../backend/email.js';
+import { emailSetupIssues, emailProvider, emailEnvironment } from '../backend/email.js';
 const missing = emailSetupIssues();
 const remoteCheck = process.argv.includes('--url');
 const secret = process.env.SESSION_SECRET || process.env.JWT_SECRET || '';
 if (secret.length < 32) missing.push('SESSION_SECRET (at least 32 characters)');
 if (!remoteCheck && missing.length) {
-  console.error('Email login setup needed: ' + missing.join(', ') + '. See AUTH_SETUP.md.');
+  console.error('Email login setup needed: ' + missing.join(', ') + '. Run npm run auth:setup for Gmail, or see AUTH_SETUP.md for Resend.');
   process.exitCode = 1;
 } else if (!remoteCheck) {
-  console.log('Email login variables are present. Live delivery still requires a valid Resend key and verified sender domain.');
+  console.log(`Email login variables are present (${emailProvider(emailEnvironment())}). Verify an actual code from your inbox to confirm delivery.`);
 }
 if (remoteCheck) {
   const value = process.argv[process.argv.indexOf('--url') + 1];

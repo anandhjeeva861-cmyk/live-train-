@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { databaseEnvironment, readEmailCode } from './helpers.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import crypto from 'node:crypto';
+import nodemailer from 'nodemailer';
 
 test('RailGo database and API integration', { timeout: 180000 }, async t => {
   Object.assign(process.env, databaseEnvironment('backend', { fixtures: true }));
@@ -90,6 +91,23 @@ test('RailGo database and API integration', { timeout: 180000 }, async t => {
         assert.equal((await c('/api/auth/config')).body.pending, null);
       } finally { globalThis.fetch = original; }
       assert.equal((await c('/api/auth/email/send', 'POST', { email: 'failure@example.test' })).status, 200, 'A failed provider send must not leave a resend cooldown');
+    });
+    await t.test('Gmail SMTP feeds the same browser-bound OTP verification flow', async sub => {
+      const keys = ['EMAIL_PROVIDER', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'];
+      const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+      Object.assign(process.env, { EMAIL_PROVIDER: 'smtp', SMTP_HOST: 'smtp.gmail.com', SMTP_PORT: '465', SMTP_USER: 'sender@gmail.com', SMTP_PASS: 'test-only' });
+      let message;
+      sub.mock.method(nodemailer, 'createTransport', () => ({ sendMail: async value => { message = value; return { accepted: value.to, rejected: [] }; }, close: () => {} }));
+      try {
+        const c = client(), email = 'smtp@example.test';
+        const sent = await c('/api/auth/email/send', 'POST', { email });
+        assert.equal(sent.status, 200);
+        assert.equal(sent.body.sent, true);
+        const code = message.text.match(/\b\d{6}\b/)[0];
+        assert.equal(JSON.stringify(sent.body).includes(code), false);
+        assert.equal((await c('/api/auth/email/verify', 'POST', { email, code })).status, 200);
+        assert.equal((await c('/api/auth/me')).body.user.email, email);
+      } finally { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
     });
     await t.test('station, normal/tourism/class/date search and empty routes', async () => {
       assert.equal((await a('/api/trains')).body.trains.length, 1209);
