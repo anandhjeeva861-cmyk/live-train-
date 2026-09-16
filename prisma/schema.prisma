@@ -19,6 +19,9 @@ model User {
   emailVerified  Boolean  @default(false)
   googleId       String?  @unique
   name           String
+  dateOfBirth    String?
+  // Contact detail only. Email OTP does not verify ownership of this number.
+  contactMobile  String?
   avatar         String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -49,6 +52,9 @@ model EmailVerification {
   attempts     Int      @default(0)
   consumed     Boolean  @default(false)
   delivered    Boolean  @default(false)
+  firstName    String?
+  dateOfBirth  String?
+  contactMobile String?
   @@index([expiresAt])
 }
 

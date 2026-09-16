@@ -17,7 +17,9 @@ Startup generates Prisma Client, applies migrations, imports the public catalogu
 
 The bundled data works without railway API credentials. The interface does not manufacture fares, seats, ratings, platforms, moving trains or tickets. Ticket actions link to IRCTC, and live status links to NTES. Existing legacy tickets remain in the database; they are not valid railway tickets.
 
-## Email OTP
+## Profile and email OTP
+
+Click **Profile** to enter a first name, date of birth, Indian mobile number and Gmail/email address. **Send email OTP** opens the verification step in the same dialog. The account and profile are saved only after the code is verified; successful verification does not navigate to a separate login page. Profile details persist after refresh. Editing them requires a new email OTP. The mobile number is an unverified contact detail, not an authentication identifier. Existing accounts and bookings are preserved by an additive migration. `/profile` and `#profile` open this dialog directly; older `/login` links open the same profile flow.
 
 The backend implements email OTP through Gmail SMTP or Resend: random six-digit codes, HMAC storage, requesting-browser binding, 10-minute expiry, 5 attempts, 60-second resend cooldown, request limits, single use and session regeneration. The form shows expiry and resend countdowns. Resend requests include an idempotency key.
 
@@ -46,8 +48,9 @@ Raw downloads and photo metadata caches stay in ignored `data/sources/`. The tra
 | `GET /api/tourist-spots?train=12639&station=KPD&radiusKm=100` | Attractions near one selected route station |
 | `GET /api/weather?lat=12.9&lng=77.5` | Open-Meteo weather or explicit unavailable result |
 | `GET /api/auth/config` | Delivery setup status and this browser's pending challenge |
-| `POST /api/auth/email/send` | Send a code with `{ "email": "you@example.com" }` |
+| `POST /api/auth/email/send` | Send a code with `{ "email": "you@example.com", "profile": { "firstName": "Your name", "dateOfBirth": "YYYY-MM-DD", "mobileNumber": "your 10-digit number" } }` |
 | `POST /api/auth/email/verify` | Verify `{ "email": "you@example.com", "code": "code from inbox" }` |
+| `POST /api/auth/email/cancel` | Cancel this browser's pending OTP before changing details |
 | `GET /api/auth/me` | Signed-in account |
 | `POST /api/auth/logout` | Revoke the session |
 | `POST /api/assistant` | Tamil/English route, weather and tourism commands |

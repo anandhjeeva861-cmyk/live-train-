@@ -1,0 +1,16 @@
+.profile-form { display: grid; gap: 15px; }
+.profile-form .field > span { font-size: 12px; color: #374d68; }
+.profile-form input { font-size: 16px; min-height: 44px; }
+.profile-form input:disabled { opacity: .75; }
+.profile-form .catalog-note { margin: -9px 0 0; font-size: 12px; }
+.profile-form #authEmailCode { font-size: 26px; letter-spacing: .3em; text-align: center; }
+.profile-form #authExpiry { margin: 0; }
+.profile-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+.profile-verified { display: inline-block; margin: 0 0 12px; padding: 6px 12px; border-radius: 20px; background: #e5f5ed; color: #146044; font-size: 13px; font-weight: 600; }
+.profile-details { display: grid; gap: 16px; margin: 8px 0 20px; }
+.profile-details div { display: grid; gap: 4px; }
+.profile-details dt { font-size: 12px; color: #5b6c81; }
+.profile-details dd { margin: 0; overflow-wrap: anywhere; font-size: 16px; }
+#authRecipient { overflow-wrap: anywhere; }
+#authSetupLink { display: inline-block; margin-top: 14px; text-decoration: none; }
+.user-chip b { max-width: 120px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

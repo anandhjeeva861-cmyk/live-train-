@@ -10,7 +10,7 @@
     if (url.origin !== location.origin) {
       movingToBackend = true;
       const route = location.pathname.replace(/\/$/, '').split('/').pop();
-      const destination = ['dashboard', 'book', 'bookings', 'tracking'].includes(route) && location.hash !== '#login' ? route : 'login';
+      const destination = ['dashboard', 'book', 'bookings', 'tracking'].includes(route) && !['#login', '#profile'].includes(location.hash) ? route : 'profile';
       location.replace(`${url.origin}/${destination}`);
     }
   }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { databaseEnvironment, readEmailCode } from './helpers.js';
+import { databaseEnvironment, readEmailCode, testProfile } from './helpers.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
@@ -39,7 +39,7 @@ test('RailGo database and API integration', { timeout: 180000 }, async t => {
     });
     await t.test('email login resumes and removed provider endpoints return 404', async () => {
       const login = async (client, email) => {
-        assert.equal((await client('/api/auth/email/send', 'POST', { email })).status, 200);
+        assert.equal((await client('/api/auth/email/send', 'POST', { email, profile: testProfile })).status, 200);
         return client('/api/auth/email/verify', 'POST', { email, code: readEmailCode(process.env.MAIL_TEST_OUTBOX, email) });
       };
       const first = await login(a, 'first@example.test');
@@ -53,12 +53,12 @@ test('RailGo database and API integration', { timeout: 180000 }, async t => {
     });
     await t.test('email codes are browser-bound, rate-limited and consumed once', async () => {
       const c = client(), d = client(), email = 'security@example.test';
-      const sent = await c('/api/auth/email/send', 'POST', { email: ' SECURITY@EXAMPLE.TEST ' });
+      const sent = await c('/api/auth/email/send', 'POST', { email: ' SECURITY@EXAMPLE.TEST ', profile: testProfile });
       assert.equal(sent.status, 200);
       assert.equal(sent.body.email, email);
       const code = readEmailCode(process.env.MAIL_TEST_OUTBOX, email);
       assert.equal(JSON.stringify(sent.body).includes(code), false);
-      assert.equal((await c('/api/auth/email/send', 'POST', { email })).status, 429);
+      assert.equal((await c('/api/auth/email/send', 'POST', { email, profile: testProfile })).status, 429);
       assert.equal((await c('/api/auth/config')).body.pending.email, email);
       assert.equal((await d('/api/auth/email/verify', 'POST', { email, code })).status, 400);
       assert.equal((await c('/api/auth/email/verify', 'POST', { email, code: '000000' })).status, 400);
@@ -69,13 +69,13 @@ test('RailGo database and API integration', { timeout: 180000 }, async t => {
       assert.notEqual(row.codeHash, code);
       assert.equal(row.consumed, true);
       await prisma.emailVerification.update({ where: { email }, data: { sentAt: new Date(0) } });
-      assert.equal((await d('/api/auth/email/send', 'POST', { email })).status, 200);
+      assert.equal((await d('/api/auth/email/send', 'POST', { email, profile: testProfile })).status, 200);
       const again = await d('/api/auth/email/verify', 'POST', { email, code: readEmailCode(process.env.MAIL_TEST_OUTBOX, email) });
       assert.equal(again.body.user.id, results.find(r => r.status === 200).body.user.id);
     });
     await t.test('expired and exhausted email codes cannot log in; provider failure is safe', async () => {
       const c = client(), email = 'expiry@example.test';
-      assert.equal((await c('/api/auth/email/send', 'POST', { email })).status, 200);
+      assert.equal((await c('/api/auth/email/send', 'POST', { email, profile: testProfile })).status, 200);
       const code = readEmailCode(process.env.MAIL_TEST_OUTBOX, email);
       for (let i = 0; i < 5; i++) assert.equal((await c('/api/auth/email/verify', 'POST', { email, code: '000000' })).status, 400);
       assert.equal((await c('/api/auth/email/verify', 'POST', { email, code })).status, 400);
@@ -85,12 +85,12 @@ test('RailGo database and API integration', { timeout: 180000 }, async t => {
       const original = globalThis.fetch;
       globalThis.fetch = (url, options) => String(url) === 'https://api.resend.com/emails' ? Promise.resolve(new Response('secret provider error', { status: 500 })) : original(url, options);
       try {
-        const failed = await c('/api/auth/email/send', 'POST', { email: 'failure@example.test' });
+        const failed = await c('/api/auth/email/send', 'POST', { email: 'failure@example.test', profile: testProfile });
         assert.equal(failed.status, 502);
         assert.equal(JSON.stringify(failed.body).includes('secret provider'), false);
         assert.equal((await c('/api/auth/config')).body.pending, null);
       } finally { globalThis.fetch = original; }
-      assert.equal((await c('/api/auth/email/send', 'POST', { email: 'failure@example.test' })).status, 200, 'A failed provider send must not leave a resend cooldown');
+      assert.equal((await c('/api/auth/email/send', 'POST', { email: 'failure@example.test', profile: testProfile })).status, 200, 'A failed provider send must not leave a resend cooldown');
     });
     await t.test('Gmail SMTP feeds the same browser-bound OTP verification flow', async sub => {
       const keys = ['EMAIL_PROVIDER', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'];
@@ -100,7 +100,7 @@ test('RailGo database and API integration', { timeout: 180000 }, async t => {
       sub.mock.method(nodemailer, 'createTransport', () => ({ sendMail: async value => { message = value; return { accepted: value.to, rejected: [] }; }, close: () => {} }));
       try {
         const c = client(), email = 'smtp@example.test';
-        const sent = await c('/api/auth/email/send', 'POST', { email });
+        const sent = await c('/api/auth/email/send', 'POST', { email, profile: testProfile });
         assert.equal(sent.status, 200);
         assert.equal(sent.body.sent, true);
         const code = message.text.match(/\b\d{6}\b/)[0];

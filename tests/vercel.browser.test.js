@@ -28,8 +28,11 @@ test('Vercel routes load public data and keep unconfigured login unavailable', {
       await page.goto(origin + route, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => document.querySelectorAll('.train-card').length > 0);
       assert.equal(await page.evaluate(() => LiveTrainAPI.isStatic), true);
-      assert.equal(await page.locator('#authPhone, #otpForm, #googleLogin, input[type="tel"]').count(), 0);
-      if (route === '/login') {
+      assert.equal(await page.locator('#authPhone, #otpForm, #googleLogin').count(), 0);
+      if (route === '/login' || route === '/profile') {
+        assert.equal(await page.locator('#authFirstName').isVisible(), true);
+        assert.equal(await page.locator('#authBirthDate').isVisible(), true);
+        assert.equal(await page.locator('#authMobile').getAttribute('type'), 'tel');
         assert.equal(await page.locator('#authEmail').isVisible(), true);
         assert.equal(await page.locator('#authSubmit').isDisabled(), true);
         assert.match(await page.locator('#authError').innerText(), /No code has been sent/);

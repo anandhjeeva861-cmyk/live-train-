@@ -55,7 +55,7 @@ registerAssistant(app, { getLiveState: liveSnapshot, getWeatherData, getCatalog:
   touristSpots: publicSpots,
 }) });
 app.use(express.static(path.join(root, 'public')));
-app.get(['/', '/login', '/dashboard', '/book', '/tracking', '/bookings'], (_req, res) => res.sendFile(path.join(root, 'public/index.html')));
+app.get(['/', '/profile', '/login', '/dashboard', '/book', '/tracking', '/bookings'], (_req, res) => res.sendFile(path.join(root, 'public/index.html')));
 app.use((_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
 app.use((error, _req, res, _next) => {
   if (res.headersSent) return res.end();

@@ -3,6 +3,8 @@ import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 
+export const testProfile = { firstName: 'Test Traveller', dateOfBirth: '2000-02-29', mobileNumber: '9000000001' };
+
 export function databaseEnvironment(prefix, { fixtures = false } = {}) {
   mkdirSync('test-results', { recursive: true });
   const env = { ...process.env, NODE_ENV: 'test', DATABASE_URL: `file:${path.resolve(`test-results/${prefix}-${crypto.randomUUID()}.db`).replaceAll('\\', '/')}`,
@@ -23,7 +25,7 @@ export function databaseEnvironment(prefix, { fixtures = false } = {}) {
 
 export async function browserLogin(request, base, outbox) {
   const email = `test-${crypto.randomUUID()}@example.test`;
-  const response = await request.post(base + '/api/auth/email/send', { data: { email } });
+  const response = await request.post(base + '/api/auth/email/send', { data: { email, profile: testProfile } });
   if (response.status() !== 200) throw new Error('Test email delivery failed');
   const verified = await request.post(base + '/api/auth/email/verify', { data: { email, code: readEmailCode(outbox, email) } });
   if (verified.status() !== 200) throw new Error('Test email login failed');

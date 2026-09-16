@@ -5,6 +5,10 @@
   "outputDirectory": "dist/vercel",
   "rewrites": [
     {
+      "source": "/profile",
+      "destination": "/index.html"
+    },
+    {
       "source": "/login",
       "destination": "/index.html"
     },

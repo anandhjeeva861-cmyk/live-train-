@@ -10,7 +10,7 @@
     "start": "node server.js",
     "build:pages": "node scripts/build-pages.js",
     "check": "node scripts/check.js",
-    "test": "node --test tests/assistant.test.js tests/tracking.test.js tests/backend.test.js tests/production.test.js tests/hosting.test.js tests/email.test.js tests/email-setup.test.js tests/static-api.test.js tests/public-data.test.js",
+    "test": "node --test tests/assistant.test.js tests/tracking.test.js tests/backend.test.js tests/production.test.js tests/hosting.test.js tests/email.test.js tests/email-setup.test.js tests/profile.test.js tests/static-api.test.js tests/public-data.test.js",
     "test:browser": "node --test tests/assistant.browser.test.js",
     "test:pages": "node scripts/build-pages.js --check && node --test tests/pages.browser.test.js",
     "data:trains": "python scripts/import-public-data.py",

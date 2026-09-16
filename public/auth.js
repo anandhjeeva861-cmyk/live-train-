@@ -1,111 +1,158 @@
-﻿(() => {
+(() => {
   const model = { user: null, ready: null };
   window.RailGoAuth = model;
-  let challenge = null, busy = false, emailDraft = '', opening = 0, countdown = null, configured = true;
+  const emptyDraft = () => ({ firstName: '', dateOfBirth: '', mobileNumber: '', email: '' });
+  let draft = emptyDraft(), challenge = null, busy = false, checking = false, configured = false, editing = false, opening = 0, countdown;
   const el = id => document.getElementById(id);
   const request = (path, body) => LiveTrainAPI.request('/api/auth/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  const error = message => { if (el('authError')) el('authError').textContent = message; };
+  const fromUser = user => ({ firstName: user.firstName || user.name || '', dateOfBirth: user.dateOfBirth || '', mobileNumber: user.mobileNumber || '', email: user.email || '' });
   const refreshProfile = () => {
     const label = document.querySelector('#profileBtn b');
-    if (label) label.textContent = model.user ? model.user.email : 'Email login';
+    if (label) label.textContent = model.user ? model.user.firstName || model.user.name : 'Profile';
     const mobile = document.querySelector('#mobileProfile small');
-    if (mobile) mobile.textContent = model.user ? 'Account' : 'Email login';
+    if (mobile) mobile.textContent = 'Profile';
   };
   model.ready = LiveTrainAPI.isStatic ? Promise.resolve() : request('me').then(data => { model.user = data.user; refreshProfile(); }).catch(() => {});
-  function error(message) { if (el('authError')) el('authError').textContent = message; }
+  function captureDraft() {
+    if (el('authFirstName')) draft = { firstName: el('authFirstName').value, dateOfBirth: el('authBirthDate').value, mobileNumber: el('authMobile').value, email: el('authEmail').value };
+  }
+  function closeProfile() { el('bookingModal').hidden = true; }
+  function renderAccount() {
+    el('modalTitle').textContent = 'Your profile';
+    el('modalBody').innerHTML = '<p class="profile-verified">Email verified</p><dl class="profile-details"><div><dt>First name</dt><dd id="profileName"></dd></div><div><dt>Date of birth</dt><dd id="profileBirthDate"></dd></div><div><dt>Mobile number</dt><dd id="profileMobile"></dd></div><div><dt>Gmail / email address</dt><dd id="profileEmail"></dd></div></dl><p class="catalog-note">The mobile number is a contact detail. Verification was completed through email.</p><div class="profile-actions"><button class="primary-button" id="profileDone">Done</button><button class="secondary-button" id="profileEdit">Edit details</button><button class="secondary-button" id="emailLogout">Sign out</button></div><p id="authError" class="form-error" role="alert"></p>';
+    el('profileName').textContent = model.user.firstName || model.user.name;
+    el('profileBirthDate').textContent = model.user.dateOfBirth ? new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(model.user.dateOfBirth + 'T00:00:00Z')) : 'Not added yet';
+    el('profileMobile').textContent = model.user.mobileNumber ? '+91 ' + model.user.mobileNumber : 'Not added yet';
+    el('profileEmail').textContent = model.user.email;
+    el('profileDone').onclick = closeProfile;
+    el('profileEdit').textContent = model.user.profileComplete ? 'Edit details' : 'Complete profile';
+    el('profileEdit').onclick = () => { if (busy) return; editing = true; draft = fromUser(model.user); model.open(); };
+    el('emailLogout').onclick = async () => {
+      if (busy) return;
+      busy = true; el('emailLogout').disabled = true; el('profileEdit').disabled = true;
+      try {
+        await request('logout', {});
+        model.user = null; challenge = null; draft = emptyDraft(); editing = false;
+        window.closeLiveConnection?.(); refreshProfile();
+        window.dispatchEvent(new Event('railgo-profile-updated'));
+        busy = false; await model.open();
+      } catch (e) { error(e.message); }
+      finally { busy = false; if (el('emailLogout')) { el('emailLogout').disabled = false; el('profileEdit').disabled = false; } }
+    };
+  }
   function render() {
     clearInterval(countdown);
-    el('modalTitle').textContent = model.user ? 'Your account' : 'Sign in with email';
     el('bookingModal').hidden = false;
-    if (model.user) {
-      el('modalBody').innerHTML = '<p id="profileEmail"></p><p>Your bookings are linked to this email.</p><button class="primary-button" id="emailLogout">Sign out</button><p id="authError" role="alert"></p>';
-      el('profileEmail').textContent = model.user.email;
-      el('emailLogout').onclick = async () => { try { await request('logout', {}); location.assign('/login'); } catch (e) { error(e.message); } };
-      return;
+    if (model.user && !editing) { renderAccount(); return; }
+    el('modalTitle').textContent = challenge ? 'Verify your email' : editing ? (model.user.profileComplete ? 'Edit your profile' : 'Complete your profile') : 'Create your profile';
+    el('modalBody').innerHTML = challenge
+      ? '<p>Enter the six-digit OTP sent to <strong id="authRecipient"></strong>.</p><form id="emailLoginForm" class="profile-form"><label class="field"><span>Email verification code</span><input id="authEmailCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label><p id="authExpiry" class="catalog-note" aria-live="off"></p><button class="primary-button" id="authSubmit" type="submit">Verify &amp; save profile</button></form><p class="catalog-note">Check your inbox and Spam folder. Only the latest OTP works.</p><div class="profile-actions"><button class="secondary-button" id="authResend">Resend OTP</button><button class="secondary-button" id="authChange">Change details</button></div><p id="authError" class="form-error" role="alert" aria-live="polite"></p>'
+      : '<p>Add your details, then verify your Gmail / email address with an OTP.</p><form id="emailLoginForm" class="profile-form"><label class="field"><span>First name</span><input id="authFirstName" name="firstName" autocomplete="given-name" maxlength="80" required></label><label class="field"><span>Date of birth</span><input id="authBirthDate" name="dateOfBirth" type="date" autocomplete="bday" min="1900-01-01" required></label><label class="field"><span>Mobile number</span><input id="authMobile" name="mobileNumber" type="tel" inputmode="tel" autocomplete="tel-national" maxlength="24" placeholder="10-digit Indian mobile number" pattern="[+0-9 ]{10,16}" required aria-describedby="authMobileHelp"></label><small id="authMobileHelp" class="catalog-note">India (+91). Your OTP will be sent to email.</small><label class="field"><span>Gmail / email address</span><input id="authEmail" name="email" type="email" autocomplete="email" maxlength="254" required></label><button class="primary-button" id="authSubmit" type="submit">Send email OTP</button></form><p id="authError" class="form-error" role="alert" aria-live="polite"></p>';
+    if (challenge) {
+      el('authRecipient').textContent = challenge.email;
+      countdown = setInterval(updateCountdown, 1000);
+    } else {
+      el('authFirstName').value = draft.firstName;
+      el('authBirthDate').value = draft.dateOfBirth;
+      el('authBirthDate').max = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      el('authMobile').value = draft.mobileNumber;
+      el('authEmail').value = draft.email;
+      if (editing && model.user) el('authEmail').readOnly = true;
+      el('emailLoginForm').addEventListener('input', captureDraft);
     }
-    el('modalBody').innerHTML = `<p>Get a six-digit verification code in your inbox.</p><form id="emailLoginForm"><label class="field"><span>Email address</span><input id="authEmail" type="email" autocomplete="email" maxlength="254" required></label>${challenge ? '<label class="field" style="margin-top:12px"><span>Verification code</span><input id="authEmailCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label><p>The code expires in 10 minutes. Check your spam folder too.</p>' : ''}<button class="primary-button" id="authSubmit" style="margin-top:16px" type="submit">${challenge ? 'Verify & sign in' : 'Send code'}</button></form>${challenge ? '<p><button class="secondary-button" id="authResend">Resend code</button> <button class="secondary-button" id="authChange">Change email</button></p>' : ''}<p id="authError" class="form-error" role="alert" aria-live="polite"></p>`;
-    el('authEmail').value = challenge?.email || emailDraft;
-    el('authEmail').oninput = () => { emailDraft = el('authEmail').value; };
-    if (challenge) el('authEmail').readOnly = true;
     const form = el('emailLoginForm');
     const isCurrent = () => !el('bookingModal').hidden && el('emailLoginForm') === form;
     const act = async verify => {
-      if (busy || LiveTrainAPI.isStatic || !configured) return;
-      busy = true;
-      el('authSubmit').disabled = true;
-      error('');
+      if (busy || checking || LiveTrainAPI.isStatic || !configured) return;
+      captureDraft();
+      busy = true; updateCountdown(); error('');
       try {
-        const email = el('authEmail').value.trim().toLowerCase();
         if (verify) {
-          const data = await request('email/verify', { email, code: el('authEmailCode').value.trim() });
-          model.user = data.user;
-          location.assign(location.pathname === '/login' ? '/dashboard' : location.href);
+          const data = await request('email/verify', { email: challenge.email, code: el('authEmailCode').value.trim() });
+          model.user = data.user; editing = false; challenge = null; draft = fromUser(data.user);
+          refreshProfile(); window.dispatchEvent(new Event('railgo-profile-updated'));
+          if (isCurrent()) render();
         } else {
-          const data = await request('email/send', { email });
-          challenge = data;
+          const profile = challenge?.profile || { firstName: draft.firstName.trim(), dateOfBirth: draft.dateOfBirth, mobileNumber: draft.mobileNumber };
+          const email = challenge?.email || draft.email.trim().toLowerCase();
+          challenge = await request('email/send', { email, profile });
+          draft = { ...challenge.profile, email: challenge.email };
           if (isCurrent()) { render(); el('authEmailCode').focus(); }
         }
       } catch (e) { if (isCurrent()) error(e.message); }
       finally { busy = false; updateCountdown(); }
     };
-    el('emailLoginForm').onsubmit = event => { event.preventDefault(); act(Boolean(challenge)); };
+    form.onsubmit = event => { event.preventDefault(); if (form.reportValidity()) act(Boolean(challenge)); };
     if (challenge) {
-      const expiry = document.createElement('p'); expiry.id = 'authExpiry'; expiry.className = 'catalog-note';
-      el('authEmailCode').closest('label').after(expiry);
-      countdown = setInterval(updateCountdown, 1000);
-      el('authResend').onclick = () => {
-        if (Date.now() < new Date(challenge.retryAt).getTime()) { error('Please wait 60 seconds before requesting another code.'); return; }
-        act(false);
+      el('authResend').onclick = () => { if (Date.now() >= new Date(challenge.retryAt).getTime()) act(false); };
+      el('authChange').onclick = async () => {
+        if (busy || checking) return;
+        busy = true; updateCountdown();
+        try { await request('email/cancel', {}); challenge = null; if (isCurrent()) render(); }
+        catch (e) { if (isCurrent()) error(e.message); }
+        finally { busy = false; updateCountdown(); }
       };
-      el('authChange').onclick = () => { if (!busy) { challenge = null; render(); } };
+    } else if (editing) {
+      const cancel = document.createElement('button'); cancel.className = 'secondary-button'; cancel.type = 'button'; cancel.id = 'profileCancel'; cancel.textContent = 'Cancel changes';
+      cancel.onclick = () => { if (!busy) { editing = false; render(); } };
+      el('authError').after(cancel);
     }
     updateCountdown();
-    if (LiveTrainAPI.isStatic) {
-      el('authSubmit').disabled = true;
-      error('Email sign-in is unavailable on this preview until the site owner connects the login service. No code has been sent.');
+    if (LiveTrainAPI.isStatic) error('Email verification is unavailable on this preview until the site owner connects the email service. No code has been sent.');
+    else if (!configured && !checking) showSetupError();
+  }
+  function showSetupError() {
+    error('Email verification is not available yet. The site owner needs to connect an email sender. No code has been sent.');
+    if (['localhost', '127.0.0.1'].includes(location.hostname) && !el('authSetupLink')) {
+      const link = document.createElement('a'); link.id = 'authSetupLink'; link.className = 'secondary-button'; link.href = 'http://127.0.0.1:4180/'; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Set up Gmail sender';
+      el('authError').after(link);
     }
   }
   function updateCountdown() {
     if (!el('authSubmit') || el('bookingModal').hidden) { clearInterval(countdown); return; }
     const remaining = challenge ? Math.max(0, Math.ceil((new Date(challenge.expiresAt) - Date.now()) / 1000)) : 0;
-    el('authSubmit').disabled = busy || LiveTrainAPI.isStatic || !configured || Boolean(challenge && !remaining);
-    if (el('authExpiry')) el('authExpiry').textContent = remaining ? `Code expires in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : 'Code expired. Request a new code below.';
+    el('authSubmit').disabled = busy || checking || LiveTrainAPI.isStatic || !configured || Boolean(challenge && !remaining);
+    el('authSubmit').textContent = busy ? (challenge ? 'Please wait…' : 'Sending OTP…') : checking ? 'Checking email service…' : challenge ? 'Verify & save profile' : 'Send email OTP';
+    if (el('authExpiry')) el('authExpiry').textContent = remaining ? `Code expires in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : 'Code expired. Request a new OTP below.';
     if (el('authResend')) {
       const retry = Math.max(0, Math.ceil((new Date(challenge.retryAt) - Date.now()) / 1000));
-      el('authResend').disabled = busy || retry > 0 || !configured;
-      el('authResend').textContent = retry ? `Resend in ${retry}s` : 'Resend code';
-      el('authChange').disabled = busy;
+      el('authResend').disabled = busy || checking || retry > 0 || !configured;
+      el('authResend').textContent = retry ? `Resend in ${retry}s` : 'Resend OTP';
+      el('authChange').disabled = busy || checking;
     }
+    if (el('profileCancel')) el('profileCancel').disabled = busy || checking;
+    for (const field of document.querySelectorAll('#emailLoginForm input')) field.disabled = busy;
   }
   model.open = async () => {
     if (busy) return;
     const attempt = ++opening;
+    await model.ready;
+    if (attempt !== opening) return;
+    if (model.user && !model.user.profileComplete && !editing) { editing = true; draft = fromUser(model.user); }
+    captureDraft();
+    checking = !LiveTrainAPI.isStatic && (!model.user || editing);
     render();
-    if (model.user || LiveTrainAPI.isStatic || busy) return;
-    el('authSubmit').disabled = true;
+    if (!checking) return;
     const form = el('emailLoginForm');
     try {
       const config = await request('config');
       if (attempt !== opening || el('bookingModal').hidden || el('emailLoginForm') !== form) return;
-      configured = config.configured;
-      challenge = config.pending;
-      render();
-      if (!config.configured) { el('authSubmit').disabled = true; error('Email sign-in is not available yet. Please contact the site owner.'); }
+      captureDraft(); configured = config.configured; challenge = config.pending;
+      if (challenge) draft = { ...challenge.profile, email: challenge.email };
+      checking = false; render();
     } catch (e) {
       if (attempt !== opening || el('bookingModal').hidden || el('emailLoginForm') !== form) return;
-      error(e.message);
-      const retry = document.createElement('button');
-      retry.type = 'button'; retry.className = 'secondary-button'; retry.textContent = 'Retry connection';
-      retry.onclick = model.open;
-      el('authError').after(retry);
-    }
+      configured = false; error(e.message);
+      const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'secondary-button'; retry.textContent = 'Retry connection'; retry.onclick = model.open; el('authError').after(retry);
+    } finally { if (attempt === opening) { checking = false; updateCountdown(); } }
   };
   model.require = () => { if (LiveTrainAPI.isStatic || model.user) return true; model.open(); return false; };
-  window.addEventListener('railgo-auth-required', () => { model.user = null; refreshProfile(); closeLiveConnection(); model.open(); });
+  window.addEventListener('railgo-auth-required', () => { model.user = null; editing = false; refreshProfile(); window.closeLiveConnection?.(); model.open(); });
   document.addEventListener('DOMContentLoaded', () => {
-    el('profileBtn').onclick = model.open;
-    el('mobileProfile').onclick = model.open;
-    refreshProfile();
-    model.ready.then(() => { if (/\/login\/?$/.test(location.pathname) || location.hash === '#login') model.open(); });
-    window.addEventListener('hashchange', () => { if (location.hash === '#login') model.open(); });
+    el('profileBtn').onclick = model.open; el('mobileProfile').onclick = model.open; refreshProfile();
+    const requestedProfile = () => /\/(?:login|profile)\/?$/.test(location.pathname) || ['#login', '#profile'].includes(location.hash);
+    model.ready.then(() => { if (requestedProfile()) model.open(); });
+    window.addEventListener('hashchange', () => { if (requestedProfile()) model.open(); });
   });
 })();
