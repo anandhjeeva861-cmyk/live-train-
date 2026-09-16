@@ -160,7 +160,7 @@ async function showSpotsOnMap() {
  scrollToId('tracking');
 }
 async function loadBookings() {
- $('#bookingList').innerHTML = '<p class="empty-card">RailGo does not issue railway tickets. Book and manage valid tickets through <a href="https://www.irctc.co.in/nget/train-search" target="_blank" rel="noopener noreferrer">IRCTC ↗</a>.</p>';
+ $('#bookingList').innerHTML = '<p class="empty-card">Live Train does not issue railway tickets. Book and manage valid tickets through <a href="https://www.irctc.co.in/nget/train-search" target="_blank" rel="noopener noreferrer">IRCTC ↗</a>.</p>';
  $('#upcomingJourneys').innerHTML = '<div class="empty-card">Plan with public route data.<br>Check current fares, availability and bookings on <a href="https://www.irctc.co.in/nget/train-search" target="_blank" rel="noopener noreferrer">IRCTC ↗</a>.</div>';
 }
 async function quickTrack() {

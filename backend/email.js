@@ -49,8 +49,8 @@ export function smtpFailure(error) {
 
 export async function sendLoginEmail(email, code, challengeId, env = emailEnvironment()) {
   if (emailSetupIssues(env).length) throw Object.assign(new Error('Email login is not configured. Please contact the site owner.'), { status: 503 });
-  const message = { from: env.EMAIL_FROM.trim(), to: [email], subject: 'Your RailGo login code',
-    text: `Your RailGo verification code is ${code}. It expires in 10 minutes. Do not share this code. If you did not request it, ignore this email.` };
+  const message = { from: env.EMAIL_FROM.trim(), to: [email], subject: 'Your Live Train verification code',
+    text: `Your Live Train verification code is ${code}. It expires in 10 minutes. Do not share this code. If you did not request it, ignore this email.` };
   if (emailProvider(env) === 'smtp') {
     const transport = smtpTransport(env);
     try {

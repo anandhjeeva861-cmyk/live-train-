@@ -19,9 +19,11 @@ export async function configureHostedFrontend(directory, env = process.env) {
   if (env.RAILGO_REQUIRE_EMAIL_LOGIN === 'true' && !apiBase) {
     throw new Error('Email login deployment requires RAILGO_BACKEND_URL. Set it to your running backend HTTPS origin.');
   }
+  // Always overwrite copied config to prevent an old deployment URL or any
+  // unrelated environment value from carrying into a new build.
+  await writeFile(new URL('config.js', directory), `// Generated public backend origin. No credentials belong in this file.\nwindow.LIVE_TRAIN_CONFIG = ${JSON.stringify({ apiBase })};\n`);
   if (apiBase) {
-    await writeFile(new URL('config.js', directory), `// Generated public backend origin. No credentials belong in this file.\nwindow.LIVE_TRAIN_CONFIG = ${JSON.stringify({ apiBase })};\n`);
-    console.log('Hosted frontend will open the configured backend for email login.');
+    console.log('Hosted frontend API calls will use the configured HTTPS backend.');
   } else {
     console.warn('RAILGO_BACKEND_URL is unset: static preview only. Email delivery requires a configured backend.');
   }

@@ -5,8 +5,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
 
-test('RailGo database and API integration', { timeout: 180000 }, async t => {
-  Object.assign(process.env, databaseEnvironment('backend', { fixtures: true }));
+test('Live Train database and API integration', { timeout: 180000 }, async t => {
+  const hostedOrigins = ['https://live-train-five.vercel.app', 'https://anandhjeeva861-cmyk.github.io'];
+  Object.assign(process.env, databaseEnvironment('backend', { fixtures: true }), { ALLOWED_ORIGINS: hostedOrigins.join(',') });
   await import('./email-provider.fixture.js');
   const { app } = await import('../server.js');
   const { prisma } = await import('../backend/db.js');
@@ -36,6 +37,26 @@ test('RailGo database and API integration', { timeout: 180000 }, async t => {
       for (const page of ['/dashboard', '/book', '/tracking', '/bookings']) { const r = await guest(page); assert.equal(r.status, 200); }
       assert.equal((await guest('/api/bookings')).status, 401);
       assert.equal((await guest('/api/tracking/12639')).status, 401);
+    });
+    await t.test('approved cross-site cookies and preflights work while other origins cannot mutate', async () => {
+      for (const origin of [...hostedOrigins, 'http://localhost:4174']) {
+        const c = client(), headers = { Origin: origin, 'Sec-Fetch-Site': 'cross-site' };
+        const preflight = await c('/api/auth/session', 'OPTIONS', undefined, { ...headers, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' });
+        assert.equal(preflight.status, 204);
+        assert.equal(preflight.headers.get('access-control-allow-origin'), origin);
+        assert.equal(preflight.headers.get('access-control-allow-credentials'), 'true');
+        const probe = await c('/api/auth/session', 'POST', {}, headers);
+        assert.equal(probe.status, 200);
+        assert.equal(probe.headers.get('access-control-allow-origin'), origin);
+        assert.equal((await c('/api/auth/session', 'GET', undefined, headers)).body.ready, true);
+      }
+      for (const origin of ['https://untrusted.example', hostedOrigins[0] + '.untrusted.example', hostedOrigins[1] + '/live-train-/', 'null']) {
+        const r = await guest('/api/auth/session', 'POST', {}, { Origin: origin, 'Sec-Fetch-Site': 'cross-site' });
+        assert.equal(r.status, 403);
+        assert.equal(r.headers.get('access-control-allow-origin'), null);
+      }
+      assert.equal((await guest('/api/auth/session', 'POST', {}, { 'Sec-Fetch-Site': 'cross-site' })).status, 403);
+      assert.equal((await guest('/config.js')).body.includes('apiBase: ""'), true, 'Node frontend keeps same-origin local/backend API calls');
     });
     await t.test('email login resumes and removed provider endpoints return 404', async () => {
       const login = async (client, email) => {

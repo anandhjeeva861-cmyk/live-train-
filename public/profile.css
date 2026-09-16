@@ -12,5 +12,5 @@
 .profile-details dt { font-size: 12px; color: #5b6c81; }
 .profile-details dd { margin: 0; overflow-wrap: anywhere; font-size: 16px; }
 #authRecipient { overflow-wrap: anywhere; }
-#authSetupLink { display: inline-block; margin-top: 14px; text-decoration: none; }
+#authSetupLink, #authBackendLink { display: inline-block; margin-top: 14px; text-decoration: none; }
 .user-chip b { max-width: 120px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

@@ -1,6 +1,8 @@
 # Email OTP login — Gmail or Resend
 
-Click **Profile** to enter first name, date of birth, Indian mobile number and Gmail/email address. RailGo verifies that email with a six-digit code delivered through Gmail SMTP or Resend, then saves the profile and keeps the user in the same dialog. Both providers use the same browser-bound verification flow. The contact mobile number is not verified by email OTP, and does not merge or authenticate accounts.
+Click **Profile** to enter first name, date of birth, Indian mobile number and Gmail/email address. Live Train verifies that email with a six-digit code delivered through Gmail SMTP or Resend, then saves the profile and keeps the user in the same dialog. Both providers use the same browser-bound verification flow. The contact mobile number is not verified by email OTP, and does not merge or authenticate accounts.
+
+The project owner reports Gmail OTP working locally. Keep those existing `.env` values unchanged. The setup steps below are for a fresh sender setup; hosted deployment uses the separate backend settings in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 Profile requests must include all four fields. Invalid dates, future birth dates and invalid Indian mobile numbers are rejected before sending. Pending details are visible only to the requesting browser, survive a page refresh with the session cookie, and cannot alter an existing profile until OTP verification succeeds. Consumed challenges clear temporary profile details. Cancelled challenges cannot be verified. The profile dialog supports editing details with another OTP, and logout clears its entered details.
 
@@ -24,12 +26,12 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_USER=your_sender@gmail.com
 SMTP_PASS=your_google_app_password
-EMAIL_FROM=RailGo <your_sender@gmail.com>
+EMAIL_FROM=Live Train <your_sender@gmail.com>
 ```
 
 Other authenticated SMTP providers can use port 465 (TLS) or 587 (required STARTTLS). Certificates are validated. Hosted environments load their own secrets; the local setup helper refuses production mode. SMTP/provider rejection never returns a successful send or leaves a usable code. Gmail account limits and delivery filtering still apply.
 
-**The local setup does not update https://live-train-five.vercel.app/.** That site currently serves static files: its `/api/auth/config` returns HTML instead of the backend's JSON. Deploy the Node/SQLite backend on persistent hosting, configure the sender there, and set its HTTPS origin as `RAILGO_BACKEND_URL` in Vercel before redeploying. See [DEPLOYMENT.md](DEPLOYMENT.md#publish-email-login-from-this-repository). Adding SMTP credentials to this static Vercel project alone cannot send email.
+**Local setup does not configure either hosted frontend.** Deploy the Node/SQLite backend on persistent hosting, privately configure the sender there, and use its HTTPS origin as `RAILGO_BACKEND_URL` in Vercel build variables and GitHub Actions variables. Redeploy both frontends as described in [DEPLOYMENT.md](DEPLOYMENT.md). Do not place SMTP credentials on either static frontend.
 
 ## Resend alternative
 
@@ -39,7 +41,7 @@ Other authenticated SMTP providers can use port 465 (TLS) or 587 (required START
    ```dotenv
    EMAIL_PROVIDER=resend
    RESEND_API_KEY=your_private_resend_key
-   EMAIL_FROM=RailGo <login@your-verified-domain.com>
+   EMAIL_FROM=Live Train <login@your-verified-domain.com>
    SESSION_SECRET=YOUR_SESSION_SECRET
    ```
 
@@ -51,9 +53,9 @@ Codes expire after ten minutes and permit five attempts. Resends have a sixty-se
 
 Bookings belong to the verified email account and can be recovered by signing in with the same email on another browser. Existing guest bookings are linked during verification when the browser still has its old guest cookie. Records without that cookie remain in the database; no ownership is inferred from passenger details. Existing email accounts retain their ID after email verification.
 
-Vercel currently hosts a static preview, which cannot send email or persist authenticated sessions. Deploy the existing Node/SQLite backend on persistent hosting (see `DEPLOYMENT.md`), configure the chosen sender there, and set `RAILGO_BACKEND_URL` to that backend's HTTPS origin in Vercel build variables and GitHub Actions variables. The preview then redirects to the backend's login page, where sign-in works on the same origin. The optional `render.yaml` includes Gmail SMTP variables. No service is provisioned by these file edits.
+Both hosted frontends call the same HTTPS backend directly using credentialed CORS. If the browser blocks cross-site cookies, the form offers **Continue on secure Live Train** before sending an OTP, opening the backend's `/profile` with a first-party cookie. The `render.yaml` includes Gmail settings, exact frontend origins and a persistent SQLite disk. No service is provisioned by these file edits.
 
-Without email credentials, the server still starts and search works, but sign-in clearly reports unavailable. Automated tests intercept Resend and SMTP only inside the test process. Live inbox delivery needs your configured sender account and has not been verified by those tests.
+Without email credentials, local development still starts and sign-in reports unavailable. Production startup requires complete sender settings, a persistent absolute database path, a strong stable session secret and the backend HTTPS origin. Automated tests intercept Resend and SMTP only inside test processes; they do not establish live hosted inbox delivery.
 
 
 If no OTP arrives:
@@ -64,4 +66,4 @@ If no OTP arrives:
 - For public recipients, use a sender on your verified Resend domain. Resend's test sender is restricted; a Gmail recipient address is fine, but putting your Gmail address in `EMAIL_FROM` does not verify it as a sender domain.
 - Check the backend's sanitized email error log and the Resend dashboard. A 401/403 usually requires checking the API key, sender/domain or recipient restrictions. An accepted API request can still bounce or go to spam; check the delivery event, inbox and spam folder.
 - After a rejected delivery, the app permits retry without retaining the failed challenge's cooldown; the overall request rate limit still applies. Only the latest successfully sent code can be verified.
-- A live frontend without a deployed backend cannot send OTP. Follow the repository-specific steps in [DEPLOYMENT.md](DEPLOYMENT.md#publish-email-login-from-this-repository).
+- A live frontend without a deployed backend cannot send OTP. Follow the repository-specific steps in [DEPLOYMENT.md](DEPLOYMENT.md).

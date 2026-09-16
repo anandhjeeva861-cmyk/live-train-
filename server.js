@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { prisma } from './backend/db.js';
 import { authMiddleware, registerAuth, requireAuth, production, fail } from './backend/auth.js';
 import { emailSetupIssues } from './backend/email.js';
+import { serverOrigins, validateProduction } from './backend/deployment.js';
 import { registerCatalog, publicSpots } from './backend/catalog.js';
 import { trains } from './public/shared/catalog.js';
 import { registerBookings } from './backend/bookings.js';
@@ -18,8 +19,8 @@ import { getWeatherData } from './public/shared/weather.js';
 export const app = express();
 const root = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT) || 4173;
-const origin = process.env.FRONTEND_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
-const origins = new Set([origin, ...(!production ? [`http://localhost:${port}`, `http://127.0.0.1:${port}`] : []), ...(process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean)]);
+validateProduction();
+const origins = serverOrigins();
 app.disable('x-powered-by');
 if (process.env.TRUST_PROXY === 'true') app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: { directives: {
@@ -31,7 +32,8 @@ app.use(helmet({ contentSecurityPolicy: { directives: {
 app.use(cors({ origin: (value, cb) => cb(null, !value || origins.has(value)), credentials: true, methods: ['GET', 'POST', 'PATCH', 'OPTIONS'] }));
 app.use(express.json({ limit: '64kb' }));
 app.use('/api', (req, _res, next) => {
-  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && ((req.get('origin') && !origins.has(req.get('origin'))) || req.get('sec-fetch-site') === 'cross-site')) throw fail(403, 'Request origin is not allowed.');
+  const source = req.get('origin');
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && (source ? !origins.has(source) : req.get('sec-fetch-site') === 'cross-site')) throw fail(403, 'Request origin is not allowed.');
   next();
 });
 app.use('/api', rateLimit({ windowMs: 60_000, limit: 240, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'Too many requests. Try again in a minute.' } }));
@@ -54,6 +56,9 @@ registerAssistant(app, { getLiveState: liveSnapshot, getWeatherData, getCatalog:
   trains,
   touristSpots: publicSpots,
 }) });
+// The app served by Node always uses its own origin, even if a branch-based
+// Pages deployment has a public backend URL checked into public/config.js.
+app.get('/config.js', (_req, res) => res.type('js').set('Cache-Control', 'no-store').send('window.LIVE_TRAIN_CONFIG = { apiBase: "" };\n'));
 app.use(express.static(path.join(root, 'public')));
 app.get(['/', '/profile', '/login', '/dashboard', '/book', '/tracking', '/bookings'], (_req, res) => res.sendFile(path.join(root, 'public/index.html')));
 app.use((_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));

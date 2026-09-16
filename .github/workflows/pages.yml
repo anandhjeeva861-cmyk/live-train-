@@ -1,4 +1,4 @@
-name: Publish RailGo Pages
+name: Publish Live Train Pages
 on:
   workflow_dispatch:
 permissions:
@@ -22,7 +22,7 @@ jobs:
       - run: node scripts/stage-pages.js
         env:
           RAILGO_BACKEND_URL: ${{ vars.RAILGO_BACKEND_URL }}
-          RAILGO_REQUIRE_EMAIL_LOGIN: ${{ vars.RAILGO_REQUIRE_EMAIL_LOGIN }}
+          RAILGO_REQUIRE_EMAIL_LOGIN: "true"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -5,6 +5,7 @@ import { prisma, writeTransaction } from './db.js';
 import { z } from 'zod';
 import { emailConfigured, sendLoginEmail } from './email.js';
 import { profileSchema, challengeProfile, profileColumns, clearedProfile } from './profile.js';
+import { sessionCookieOptions } from './deployment.js';
 
 export const production = process.env.NODE_ENV === 'production';
 export const fail = (status, message) => Object.assign(new Error(message), { status });
@@ -38,7 +39,7 @@ export function authMiddleware() {
   // Generated only in process memory, never written to examples or logs.
   return session({ name: 'railgo.sid', secret: secret || crypto.randomBytes(48).toString('base64url'),
     store: new DatabaseSessions(), resave: false, saveUninitialized: false,
-    cookie: { httpOnly: true, secure: production, sameSite: 'lax', maxAge: 7 * 86400000 },
+    cookie: sessionCookieOptions(),
   });
 }
 
@@ -59,6 +60,14 @@ export function registerAuth(app) {
     res.json({ configured: emailConfigured(), pending: pending ? { email: challenge.email, profile: challengeProfile(challenge), expiresAt: challenge.expiresAt, retryAt: new Date(challenge.sentAt.getTime() + 60000) } : null });
   });
   const limiter = limit => rateLimit({ windowMs: 15 * 60_000, limit, message: { error: 'Too many attempts. Please try again in 15 minutes.' } });
+  // Confirm that this browser can retain the backend's HttpOnly cookie before
+  // sending an OTP. Some browsers block cookies across unrelated hosted sites.
+  app.post('/api/auth/session', limiter(30), async (req, res) => {
+    req.session.browserReady = true;
+    await save(req);
+    res.json({ ready: true });
+  });
+  app.get('/api/auth/session', (req, res) => res.json({ ready: req.session.browserReady === true || req.session.emailAuthenticated === true }));
   app.post('/api/auth/email/send', limiter(10), async (req, res) => {
     const email = emailSchema.parse(req.body?.email);
     const profile = profileSchema.parse(req.body?.profile);
@@ -114,13 +123,15 @@ export function registerAuth(app) {
     await new Promise((resolve, reject) => req.session.regenerate(error => error ? reject(error) : resolve()));
     req.session.userId = result.id;
     req.session.emailAuthenticated = true;
+    req.session.browserReady = true;
     await save(req);
     res.json({ user: userDto(result) });
   });
   app.get('/api/auth/me', requireAuth, (req, res) => res.json({ user: userDto(req.user) }));
   app.post('/api/auth/logout', async (req, res) => {
     await new Promise((resolve, reject) => req.session.destroy(error => error ? reject(error) : resolve()));
-    res.clearCookie('railgo.sid', { httpOnly: true, secure: production, sameSite: 'lax' });
+    const { maxAge, ...cookie } = sessionCookieOptions();
+    res.clearCookie('railgo.sid', cookie);
     res.json({ loggedOut: true });
   });
 }

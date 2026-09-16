@@ -1,6 +1,6 @@
-# RailGo — public train routes and real places
+# Live Train — public train routes and real places
 
-RailGo now uses **10,516 unique train numbers, 9,494 stations, 289,363 route entries and 5,142 photographed tourist places**. Search between intermediate stations, browse train numbers, inspect published schedules, filter attractions near every route station and open actual locations in Google Maps.
+Live Train uses **10,516 unique train numbers, 9,494 stations, 289,363 route entries and 5,142 photographed tourist places**. Search between intermediate stations, browse train numbers, inspect published schedules, filter attractions near every route station and open actual locations in Google Maps.
 
 **These are public snapshots, not 10,516 verified current services.** 8,490 train records come from a dataset published September 15, 2025; 2,026 additional records come from a 2016 archive. Source dates are shown throughout the app. Check NTES before travel. See [DATA_SOURCES.md](DATA_SOURCES.md) for provenance, licensing and coverage.
 
@@ -23,7 +23,7 @@ Click **Profile** to enter a first name, date of birth, Indian mobile number and
 
 The backend implements email OTP through Gmail SMTP or Resend: random six-digit codes, HMAC storage, requesting-browser binding, 10-minute expiry, 5 attempts, 60-second resend cooldown, request limits, single use and session regeneration. The form shows expiry and resend countdowns. Resend requests include an idempotency key.
 
-Run `npm run auth:setup` for the local Gmail setup page. It verifies your sender using a Google App Password and saves email settings privately in `.env`. Alternatively configure `EMAIL_PROVIDER=resend`, `RESEND_API_KEY` and `EMAIL_FROM` with a verified sender domain. Run `npm run auth:check` and verify an email from your inbox. See [AUTH_SETUP.md](AUTH_SETUP.md). **Neither sender account is configured yet; actual inbox delivery remains unverified.** Automated OTP tests intercept the provider only in the test process; the app has no fixed code or fake send fallback. The Vercel website also needs the persistent backend and `RAILGO_BACKEND_URL`; local sender setup does not change the live deployment.
+Local Gmail OTP is working according to the project owner, and its private `.env` is preserved. For a fresh installation, `npm run auth:setup` opens the local sender verification form; see [AUTH_SETUP.md](AUTH_SETUP.md). Automated tests intercept delivery only in isolated test processes; they do not send real email. Vercel and GitHub Pages now support API calls to one persistent HTTPS Node backend, configured through `RAILGO_BACKEND_URL`. Exact CORS origins, secure cookies and a backend-hosted Profile fallback support the hosted OTP flow. Provisioning that backend and configuring both frontend deployments is still required; follow [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Rebuild public data
 
@@ -66,6 +66,8 @@ npm run test:fullstack
 npm run test:browser
 npm run test:pages
 npm run test:vercel
+npm run test:hosted
+npm run test:email-setup
 npm run security:secrets
 ```
 

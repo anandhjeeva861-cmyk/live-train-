@@ -144,6 +144,11 @@
     } catch (e) {
       if (attempt !== opening || el('bookingModal').hidden || el('emailLoginForm') !== form) return;
       configured = false; error(e.message);
+      if (e.code === 'SESSION_COOKIE_BLOCKED' && LiveTrainAPI.backendProfileUrl) {
+        const link = document.createElement('a'); link.id = 'authBackendLink'; link.className = 'secondary-button'; link.href = LiveTrainAPI.backendProfileUrl; link.textContent = 'Continue on secure Live Train';
+        el('authError').after(link);
+        return;
+      }
       const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'secondary-button'; retry.textContent = 'Retry connection'; retry.onclick = model.open; el('authError').after(retry);
     } finally { if (attempt === opening) { checking = false; updateCountdown(); } }
   };
