@@ -85,6 +85,7 @@ async function selectTrackingTrain(summary) {
   await drawRoute(train);
   if (request !== state.routeRequest) return;
   await loadSpots();
+  if (request !== state.routeRequest) return;
   loadWeather(train.to, request);
  } catch (error) { if (request === state.routeRequest) { $('#connectionBadge').textContent = 'Could not load route'; showToast(error.message); } }
 }
@@ -115,6 +116,7 @@ async function drawRoute(train) {
 function fitRoute() { if (state.routeLayer?.getLayers().length) state.map.fitBounds(state.routeLayer.getBounds(), { padding: [25,25], maxZoom: 12 }); }
 async function loadWeather(station, request = state.routeRequest) {
  const { hasCoordinates } = await geography;
+ if (request !== state.routeRequest) return;
  $('#weatherPlace').textContent = station.name;
  for (const id of ['tempValue','feelsValue','windValue','rainValue']) $('#' + id).textContent = '—';
  $('#forecastRow').innerHTML = '';
@@ -124,9 +126,9 @@ async function loadWeather(station, request = state.routeRequest) {
   const data = await fetchJson(`/api/weather?${new URLSearchParams({ lat: station.lat, lng: station.lng })}`);
   if (request !== state.routeRequest) return;
   if (!data.current || data.fallback) throw new Error('Weather temporarily unavailable');
-  $('#tempValue').textContent = Math.round(data.current.temperature_2m);
-  $('#feelsValue').textContent = Math.round(data.current.apparent_temperature) + '°C';
-  $('#windValue').textContent = data.current.wind_speed_10m + ' km/h';
+  $('#tempValue').textContent = Number.isFinite(data.current.temperature_2m) ? Math.round(data.current.temperature_2m) : '—';
+  $('#feelsValue').textContent = Number.isFinite(data.current.apparent_temperature) ? Math.round(data.current.apparent_temperature) + '°C' : '—';
+  $('#windValue').textContent = Number.isFinite(data.current.wind_speed_10m) ? data.current.wind_speed_10m + ' km/h' : '—';
   $('#weatherLabel').textContent = `Open-Meteo · ${data.current.time || 'current reading'}`;
  } catch (error) { if (request === state.routeRequest) $('#weatherLabel').textContent = error.message; }
 }
@@ -134,6 +136,8 @@ function photoCredit(s) { return `<small class="photo-credit">Photo: ${escapeHtm
 function spotCard(s) { return `<article class="spot-card"><img loading="lazy" decoding="async" src="${escapeHtml(s.image)}" alt="${escapeHtml(s.name)}"><div class="spot-body"><span class="type-pill">${escapeHtml(s.category)}</span><h3>${escapeHtml(s.name)}</h3><p>${s.distanceKm} km straight-line from ${escapeHtml(s.stationName)} (${escapeHtml(s.stationCode)})</p>${photoCredit(s)}<div class="spot-actions"><a class="secondary-button" href="${escapeHtml(s.mapsUrl)}" target="_blank" rel="noopener noreferrer">View in Google Maps ↗</a><a href="${escapeHtml(s.directionsUrl)}" target="_blank" rel="noopener noreferrer">Directions from station ↗</a><a href="${escapeHtml(s.sourceUrl)}" target="_blank" rel="noopener noreferrer">Place source</a></div></div></article>`; }
 async function loadSpots({ offset = 0, stationOnly = false } = {}) {
  const request = ++state.spotsRequest;
+ state.spots = []; state.poiLayer?.remove();
+ $('#spotPrev').disabled = $('#spotNext').disabled = true;
  const params = new URLSearchParams({ radiusKm: $('#spotRadius').value, offset, limit: 12 });
  if (state.selectedTrain && !stationOnly) params.set('train', state.selectedTrain.number);
  const station = stationOnly ? $('#toStation').value : $('#spotStation').value;

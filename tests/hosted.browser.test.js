@@ -70,6 +70,23 @@ test('Vercel and Pages share an HTTPS OTP backend, with a cookie-blocking fallba
     assert.equal((await prisma.user.findUnique({ where: { email } })).emailVerified, true);
     assert.deepEqual(errors, []); await context.close();
   }
+  const changedContext = await browser.newContext({ ignoreHTTPSErrors: true }), changedPage = await changedContext.newPage();
+  await changedPage.goto(vercel); await changedPage.locator('#profileBtn').click();
+  await changedPage.waitForFunction(() => !document.querySelector('#authSubmit').disabled);
+  await changedPage.locator('#authFirstName').fill(testProfile.firstName);
+  await changedPage.locator('#authBirthDate').fill(testProfile.dateOfBirth);
+  await changedPage.locator('#authMobile').fill(testProfile.mobileNumber);
+  await changedPage.locator('#authEmail').fill('cookie-changed@example.test');
+  await changedPage.route(backend + '/api/auth/session', async route => {
+    if (route.request().method() === 'GET') await route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': vercel, 'Access-Control-Allow-Credentials': 'true' }, body: '{"ready":false}' });
+    else await route.continue();
+  });
+  await changedPage.locator('#authSubmit').click();
+  await changedPage.waitForSelector('#authBackendLink');
+  assert.equal(mails.size, 2, 'Cookie support is checked again before sending a code');
+  assert.equal(await changedPage.locator('#authSubmit').isDisabled(), true);
+  await changedContext.close();
+
   const context = await browser.newContext({ ignoreHTTPSErrors: true }), page = await context.newPage();
   await page.route(backend + '/api/auth/session', async route => {
     if (route.request().method() === 'GET') await route.fulfill({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': vercel, 'Access-Control-Allow-Credentials': 'true' }, body: '{"ready":false}' });

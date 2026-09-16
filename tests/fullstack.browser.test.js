@@ -18,6 +18,15 @@ test('public catalogue, route tourism, Google Maps and real OTP challenge flow i
  const errors = []; page.on('pageerror',e => errors.push(e.message));
  await page.goto('http://127.0.0.1:4189/',{waitUntil:'domcontentloaded'});
  await checkCatalogue(page);
+ // Missing provider fields must remain unavailable, including null (not 0).
+ await page.route('**/api/weather?*', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ current: { temperature_2m: 27, apparent_temperature: null } }) }));
+ await page.evaluate(() => loadWeather({ name: 'Partial weather test', lat: 12.9, lng: 77.5 }));
+ assert.equal(await page.locator('#tempValue').innerText(), '27');
+ assert.equal(await page.locator('#feelsValue').innerText(), '—');
+ assert.equal(await page.locator('#windValue').innerText(), '—');
+ await page.evaluate(() => loadWeather({ name: 'Stale weather test', lat: 12.9, lng: 77.5 }, -1));
+ assert.equal(await page.locator('#weatherPlace').innerText(), 'Partial weather test');
+ await page.unroute('**/api/weather?*');
  await page.locator('#profileBtn').click();
  await page.waitForFunction(() => !document.querySelector('#authSubmit').disabled);
  assert.equal(await page.locator('#modalTitle').innerText(), 'Create your profile');

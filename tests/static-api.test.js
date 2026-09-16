@@ -14,4 +14,7 @@ test('static catalogue returns real stop times and never creates synthetic ticke
  assert.deepEqual(await requestStatic('/api/bookings'),[]);
  await assert.rejects(requestStatic('/api/trains/search?from=MAS&to=MAS'));
  await assert.rejects(requestStatic('/api/tourist-spots?train=12639&radiusKm=1000'));
+ for (const query of ['lat=&lng=77', 'lat=12&lng=', 'lat=%20&lng=77', 'lat=12&lon=%20', 'lat=91&lng=77']) {
+  await assert.rejects(requestStatic('/api/weather?' + query), /Valid weather coordinates/);
+ }
 });

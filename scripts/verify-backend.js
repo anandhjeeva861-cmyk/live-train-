@@ -1,4 +1,4 @@
-import { allowedOrigin } from '../backend/deployment.js';
+import { allowedOrigin } from '../backend/origins.js';
 
 // This check never requests an OTP or reads private provider configuration.
 // Its temporary session is revoked after checking cookie retention.

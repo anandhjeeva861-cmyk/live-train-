@@ -40,7 +40,9 @@
       return result;
     }
     if (isRemote && (path === '/api/auth/config' || path.startsWith('/api/auth/email/'))) {
-      sessionCheck ||= checkSession().catch(error => { sessionCheck = null; throw error; });
+      // Share concurrent probes only. Cookie settings/expiry can change while
+      // the page stays open, so a successful probe is not valid forever.
+      sessionCheck ||= checkSession().finally(() => { sessionCheck = null; });
       await sessionCheck;
     }
     const result = await remoteRequest(path, options);

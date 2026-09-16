@@ -52,8 +52,9 @@ export async function requestStatic(path, options = {}) {
  }
  if (route === '/api/bookings') return [];
  if (route === '/api/weather') {
-  const lat = Number(params.get('lat')), lng = Number(params.get('lng'));
-  if (!params.has('lat') || !params.has('lng') || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new Error('Valid weather coordinates are required.');
+  const latitude = params.get('lat'), longitude = params.get('lon') ?? params.get('lng');
+  const lat = Number(latitude), lng = Number(longitude);
+  if (!latitude?.trim() || !longitude?.trim() || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new Error('Valid weather coordinates are required.');
   return getWeatherData(lat,lng);
  }
  if (route === '/api/assistant/status') return { mode: 'commands', languages: ['ta-IN','en-IN'] };

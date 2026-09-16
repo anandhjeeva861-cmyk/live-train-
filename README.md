@@ -73,4 +73,4 @@ npm run security:secrets
 
 Tests use separate SQLite files and test-only email delivery. Older booking/concurrency regression fixtures live exclusively under `tests/fixtures/`; production never seeds or serves them.
 
-Vercel and GitHub Pages can serve the public catalogue without a backend. Email login requires a persistent hosted Node/SQLite backend. [DEPLOYMENT.md](DEPLOYMENT.md) explains configuration. Regenerate the root Pages entry with `npm run build:pages` after changing `public/index.html`. No changes have been deployed remotely.
+Vercel and GitHub Pages can serve a local static preview of the public catalogue without a backend. Hosted email login requires a persistent Node/SQLite backend. Production builds now check the backend before publishing; Pages publishes on pushes to `main` after its Actions variable and publishing source are configured. [DEPLOYMENT.md](DEPLOYMENT.md) explains the exact setup. Regenerate the root Pages entry with `npm run build:pages` after changing `public/index.html`. See [AUDIT.md](AUDIT.md) for the current findings and verification. No changes have been deployed remotely.

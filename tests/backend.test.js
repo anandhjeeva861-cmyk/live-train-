@@ -12,6 +12,7 @@ test('Live Train database and API integration', { timeout: 180000 }, async t => 
   await import('./email-provider.fixture.js');
   const { app } = await import('../server.js');
   const { prisma } = await import('../backend/db.js');
+  const { DatabaseSessions } = await import('../backend/auth.js');
   const { streams, closeStreams } = await import('../backend/tracking.js');
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
@@ -31,6 +32,20 @@ test('Live Train database and API integration', { timeout: 180000 }, async t => 
   const payload = { trainNumber: '12639', journeyDate: date, classCode: 'CC', seat: 'S1', passengers: [{ name: 'Demo Passenger', age: 25, gender: 'other' }, { name: 'Second Passenger', age: 30, gender: 'female' }] };
   let pnr;
   try {
+    await t.test('session reads cannot overwrite newer challenges or restore a logged-out session', async () => {
+      const store = new DatabaseSessions();
+      const invoke = (method, ...args) => new Promise((resolve, reject) => store[method](...args, (error, value) => error ? reject(error) : resolve(value)));
+      const stale = { cookie: { expires: new Date(Date.now() + 60000) }, emailChallenge: 'old-challenge' };
+      await prisma.session.create({ data: { id: 'expired-test-session', data: '{}', expiresAt: new Date(0) } });
+      await invoke('set', 'session-race-test', stale);
+      assert.equal(await prisma.session.findUnique({ where: { id: 'expired-test-session' } }), null);
+      await invoke('set', 'session-race-test', { ...stale, emailChallenge: 'new-challenge' });
+      await invoke('touch', 'session-race-test', stale);
+      assert.equal((await invoke('get', 'session-race-test')).emailChallenge, 'new-challenge');
+      await invoke('destroy', 'session-race-test');
+      await invoke('touch', 'session-race-test', stale);
+      assert.equal(await invoke('get', 'session-race-test'), null);
+    });
     await t.test('health, seeded relationships and guarded routes', async () => {
       assert.equal((await a('/api/health')).body.database, 'connected');
       assert.equal(await prisma.train.count(), 1209);
@@ -232,6 +247,8 @@ test('Live Train database and API integration', { timeout: 180000 }, async t => 
       assert.equal((await a('/api/tourism/3')).body.name, 'Lalbagh Botanical Garden');
       assert.equal((await a('/api/weather?lat=91&lon=1')).status, 400);
       assert.equal((await a('/api/weather?lat=1')).status, 400);
+      assert.equal((await a('/api/weather?lat=%20&lon=77')).status, 400);
+      assert.equal((await a('/api/weather?lat=12&lon=%20')).status, 400);
     });
     await t.test('weather provider failure is explicit, cached and does not block tracking', async () => {
       const original = globalThis.fetch;

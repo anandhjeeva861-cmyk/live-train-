@@ -6,6 +6,14 @@
   const el = id => document.getElementById(id);
   const request = (path, body) => LiveTrainAPI.request('/api/auth/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
   const error = message => { if (el('authError')) el('authError').textContent = message; };
+  function cookieFallback(e) {
+    if (e.code !== 'SESSION_COOKIE_BLOCKED' || !LiveTrainAPI.backendProfileUrl) return false;
+    if (!el('authBackendLink')) {
+      const link = document.createElement('a'); link.id = 'authBackendLink'; link.className = 'secondary-button'; link.href = LiveTrainAPI.backendProfileUrl; link.textContent = 'Continue on secure Live Train';
+      el('authError').after(link);
+    }
+    return true;
+  }
   const fromUser = user => ({ firstName: user.firstName || user.name || '', dateOfBirth: user.dateOfBirth || '', mobileNumber: user.mobileNumber || '', email: user.email || '' });
   const refreshProfile = () => {
     const label = document.querySelector('#profileBtn b');
@@ -80,7 +88,7 @@
           draft = { ...challenge.profile, email: challenge.email };
           if (isCurrent()) { render(); el('authEmailCode').focus(); }
         }
-      } catch (e) { if (isCurrent()) error(e.message); }
+      } catch (e) { if (isCurrent()) { error(e.message); if (cookieFallback(e)) configured = false; } }
       finally { busy = false; updateCountdown(); }
     };
     form.onsubmit = event => { event.preventDefault(); if (form.reportValidity()) act(Boolean(challenge)); };
@@ -144,11 +152,7 @@
     } catch (e) {
       if (attempt !== opening || el('bookingModal').hidden || el('emailLoginForm') !== form) return;
       configured = false; error(e.message);
-      if (e.code === 'SESSION_COOKIE_BLOCKED' && LiveTrainAPI.backendProfileUrl) {
-        const link = document.createElement('a'); link.id = 'authBackendLink'; link.className = 'secondary-button'; link.href = LiveTrainAPI.backendProfileUrl; link.textContent = 'Continue on secure Live Train';
-        el('authError').after(link);
-        return;
-      }
+      if (cookieFallback(e)) return;
       const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'secondary-button'; retry.textContent = 'Retry connection'; retry.onclick = model.open; el('authError').after(retry);
     } finally { if (attempt === opening) { checking = false; updateCountdown(); } }
   };

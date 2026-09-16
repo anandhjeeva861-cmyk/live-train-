@@ -17,7 +17,8 @@ const userDto = user => ({ id: user.id, name: user.name, firstName: user.name, e
   dateOfBirth: user.dateOfBirth, mobileNumber: user.contactMobile, emailVerified: user.emailVerified,
   profileComplete: Boolean(user.name && user.dateOfBirth && user.contactMobile) });
 
-class DatabaseSessions extends session.Store {
+export class DatabaseSessions extends session.Store {
+  nextCleanup = 0;
   get(sid, cb) {
     prisma.session.findUnique({ where: { id: digest(sid) } }).then(row => {
       cb(null, row && row.expiresAt > new Date() ? JSON.parse(row.data) : null);
@@ -25,10 +26,17 @@ class DatabaseSessions extends session.Store {
   }
   set(sid, data, cb = () => {}) {
     const record = { data: JSON.stringify(data), expiresAt: new Date(data.cookie.expires || Date.now() + 7 * 86400000) };
-    prisma.session.upsert({ where: { id: digest(sid) }, create: { id: digest(sid), ...record }, update: record }).then(() => cb()).catch(cb);
+    const clean = Date.now() >= this.nextCleanup;
+    if (clean) this.nextCleanup = Date.now() + 15 * 60000;
+    const cleanup = clean ? prisma.session.deleteMany({ where: { expiresAt: { lte: new Date() } } }) : Promise.resolve();
+    cleanup.then(() => prisma.session.upsert({ where: { id: digest(sid) }, create: { id: digest(sid), ...record }, update: record })).then(() => cb()).catch(cb);
   }
   destroy(sid, cb = () => {}) { prisma.session.deleteMany({ where: { id: digest(sid) } }).then(() => cb()).catch(cb); }
-  touch(sid, data, cb) { this.set(sid, data, cb); }
+  touch(sid, data, cb = () => {}) {
+    // An in-flight read must never recreate a session deleted by logout or
+    // overwrite a newer pending challenge with its old session snapshot.
+    prisma.session.updateMany({ where: { id: digest(sid) }, data: { expiresAt: new Date(data.cookie.expires || Date.now() + 7 * 86400000) } }).then(() => cb()).catch(cb);
+  }
 }
 
 export function authMiddleware() {

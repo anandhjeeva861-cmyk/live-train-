@@ -9,7 +9,7 @@ The entry point is **`server.js`**, started with **`npm start`**. Gmail delivery
 
 The owner reports local Gmail OTP working. These changes preserve the existing local `.env`. No service has been provisioned, secrets uploaded or remote deployment performed by these edits. Replace the example backend URL below with your actual service URL.
 
-On 16 September 2026, a read-only check of both deployed `config.js` files found `apiBase` empty. Both websites therefore need the backend URL configured **and a new frontend deployment**. The existing backend already persists OTP challenges and sessions; an empty public URL cannot be fixed by adding Gmail secrets to a frontend.
+On 16 September 2026, a read-only check of both deployed `config.js` files found `apiBase` empty. Vercel's `/api/auth/config` returned HTML instead of JSON. The owner confirmed that no backend has been deployed. Both websites therefore need a persistent backend, its URL configured **and a new frontend deployment**. An empty public URL cannot be fixed by adding Gmail secrets to a frontend. Local `.env` settings are private and do not transfer through a GitHub push.
 
 ## 1. Deploy the backend on Render
 
@@ -90,13 +90,15 @@ Use the real backend origin. Apply to Production and any supported Preview envir
 
 After redeploying, open `https://live-train-five.vercel.app/config.js` and confirm `apiBase` is your backend origin.
 
+Before producing a hosted build, the build now checks backend health, email configuration, session cookies and credentialed CORS. Vercel's production domain is taken from `VERCEL_PROJECT_PRODUCTION_URL`; previews use `VERCEL_URL`. Enable Vercel's automatically exposed system environment variables. If using additional/custom domains, set `RAILGO_FRONTEND_ORIGINS` to their exact comma-separated HTTPS origins. Those same origins must be allowed on the backend. A failed check stops publication and explains the missing configuration; it sends no email. This check verifies configuration and session persistence, not real inbox delivery.
+
 ## 3. Connect GitHub Pages
 
 1. In **GitHub > repository > Settings > Secrets and variables > Actions > Variables**, set repository variable **`RAILGO_BACKEND_URL`** to the **same HTTPS backend origin** as Vercel.
 2. In **Settings > Pages**, choose **GitHub Actions**.
 3. Run **Actions > Publish Live Train Pages > Run workflow** on `main`.
 
-The workflow runs `node scripts/stage-pages.js`, requires the backend URL and publishes only `dist/pages`. It does not run a backend on Pages. Publishing is manual; normal pushes run checks.
+The workflow runs `node scripts/stage-pages.js`, requires a healthy backend with email settings and publishes only `dist/pages`. It checks CORS for the repository owner's `github.io` origin. For a custom Pages domain, also set repository variable `RAILGO_FRONTEND_ORIGINS`. It does not run a backend on Pages. After the initial setup, pushes to `main` publish automatically; manual publishing remains available. Missing backend configuration fails the deployment instead of silently publishing a site with disabled OTP.
 
 After the workflow succeeds, open `https://anandhjeeva861-cmyk.github.io/live-train-/public/config.js` and confirm it has the same `apiBase` as Vercel. If it is still empty, check the repository **Actions variable**, selected workflow branch and Pages publishing source; editing a Vercel variable does not update Pages.
 
@@ -158,7 +160,7 @@ node scripts/stage-pages.js
 
 `test:hosted` uses isolated HTTPS domains, production cookies/CORS, test-only SMTP interception, separate SQLite files and process restarts. It checks both frontend layouts, OTP verification, profile refresh and cookie-blocking fallback. Tests neither send real mail nor change local credentials, and do not prove a remote service is configured.
 
-Verified on 16 September 2026: syntax and secret checks; all 57 unit/API tests; email-setup, hosted HTTPS/restart, fullstack, Pages and Vercel browser suites; both frontend builds with the same test HTTPS origin; and the running localhost backend's health/configuration/session check. The local `.env` remained byte-for-byte unchanged, and its private settings were absent from generated browser assets. The test origin is not a deployed service: rebuild with the real Render URL before publishing. Real hosted inbox delivery remains to be verified after provisioning.
+The current audit passed 59 unit/API tests, email-setup, hosted HTTPS/restart, fullstack, assistant, Pages and Vercel browser suites, syntax/secret checks and both dependency-free static builds in a clean checkout. See [AUDIT.md](AUDIT.md) for the complete results. Local `.env` was preserved. Test origins are not deployed services: build with the real backend URL before publishing. Real hosted inbox delivery remains to be verified after provisioning.
 
 ## Troubleshooting
 

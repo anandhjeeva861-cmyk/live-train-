@@ -48,7 +48,7 @@ registerCatalog(app);
 registerBookings(app);
 registerTracking(app);
 app.get('/api/weather', async (req, res) => {
-  const coordinate = (value, max) => z.coerce.number().min(-max).max(max).parse(value);
+  const coordinate = (value, max) => z.string().trim().min(1).pipe(z.coerce.number().min(-max).max(max)).parse(value);
   if (req.query.lat === undefined || (req.query.lon === undefined && req.query.lng === undefined) || req.query.lat === '' || req.query.lon === '' || req.query.lng === '') throw fail(400, 'lat and lon are required.');
   res.json(await getWeatherData(coordinate(req.query.lat, 90), coordinate(req.query.lon ?? req.query.lng, 180)));
 });
