@@ -9,6 +9,8 @@ The entry point is **`server.js`**, started with **`npm start`**. Gmail delivery
 
 The owner reports local Gmail OTP working. These changes preserve the existing local `.env`. No service has been provisioned, secrets uploaded or remote deployment performed by these edits. Replace the example backend URL below with your actual service URL.
 
+On 16 September 2026, a read-only check of both deployed `config.js` files found `apiBase` empty. Both websites therefore need the backend URL configured **and a new frontend deployment**. The existing backend already persists OTP challenges and sessions; an empty public URL cannot be fixed by adding Gmail secrets to a frontend.
+
 ## 1. Deploy the backend on Render
 
 Use a **paid Render Node Web Service with a persistent disk**. Free Render web services block SMTP ports 25/465/587 and cannot attach persistent disks. See [Render free service limits](https://render.com/docs/free).
@@ -22,11 +24,11 @@ Push the source changes without `.env`, credentials, database files or test outp
 | Compute | Paid `0.5c-512mb` or larger |
 | Instances | **1**, no clustering or autoscaling |
 | Persistent disk | 1 GB mounted at `/var/data` |
-| Build command | `npm ci --include=dev && DATABASE_URL=file:./prisma/build.db npx prisma generate` |
+| Build command | `DATABASE_URL=file:./prisma/build.db npm ci --include=dev && DATABASE_URL=file:./prisma/build.db npx prisma generate` |
 | Start command | `npx prisma migrate deploy && npx prisma db seed && npm start` |
 | Health check | `/api/health` |
 
-The disk exists at runtime, not during builds, so migrations and seeding belong in the start command. The temporary build database URL only supports Prisma generation. Seeding preserves accounts/tickets and skips an unchanged catalogue import. See [Render disks](https://render.com/docs/disks) and [Blueprint settings](https://render.com/docs/blueprint-spec).
+The disk exists at runtime, not during builds, so migrations and seeding belong in the start command. The temporary database URL applies to both dependency installation hooks and Prisma generation; neither needs access to `/var/data` during a build. These command-scoped overrides do not change the production `DATABASE_URL`. Seeding preserves accounts/tickets and skips an unchanged catalogue import. See [Render disks](https://render.com/docs/disks) and [Blueprint settings](https://render.com/docs/blueprint-spec).
 
 ### Backend environment variables
 
@@ -65,7 +67,13 @@ Render provides a URL in the form **`https://<your-service-name>.onrender.com`**
 - `/api/health` must report `status: "ok"` and `database: "connected"`.
 - `/api/auth/config` must report `configured: true`. This checks settings, not inbox delivery.
 - Open `/profile`, enter your details and email, send an actual OTP and verify it before connecting the frontends. Check Spam too.
-- Optional read-only check: `npm run auth:check -- --url https://<your-service-name>.onrender.com`. It sends no email and prints no credentials.
+- Run the deployment check below. It checks database health, email configuration, credentialed CORS, JSON POST preflights for both OTP endpoints, cookie flags and session persistence. It creates and revokes temporary sessions, sends no email and prints no credentials:
+
+```text
+npm run auth:check -- --url https://<your-service-name>.onrender.com --origin https://live-train-five.vercel.app --origin https://anandhjeeva861-cmyk.github.io --origin http://localhost:4174
+```
+
+This command cannot detect a browser's third-party-cookie policy or prove Gmail delivery. The browser/inbox tests below remain necessary.
 
 ## 2. Connect Vercel
 
@@ -76,9 +84,11 @@ RAILGO_BACKEND_URL=https://<your-service-name>.onrender.com
 RAILGO_REQUIRE_EMAIL_LOGIN=true
 ```
 
-Use the real backend origin. Apply to Production and any supported Preview environment, then **redeploy**. Each preview hostname must also appear in the backend's exact origin allowlist. Existing builds do not change when an environment variable changes.
+Use the real backend origin. Apply to Production and any supported Preview environment, then **redeploy**. Each preview hostname must also appear in the backend's exact origin allowlist. Existing builds do not change when an environment variable changes. Vercel production/preview builds now refuse a missing URL automatically using `VERCEL_ENV`, even if `RAILGO_REQUIRE_EMAIL_LOGIN` was omitted or set to false. Local static previews remain available. See [Vercel environment variables](https://vercel.com/docs/environment-variables).
 
 `vercel.json` selects Other framework, install `npm ci --ignore-scripts`, build `npm run build:vercel`, output `dist/vercel`. The generated `dist/vercel/config.js` contains only the public backend URL. Do not add Gmail credentials to this static frontend project. Keep the internal `RAILGO_BACKEND_URL` name; visible branding is Live Train.
+
+After redeploying, open `https://live-train-five.vercel.app/config.js` and confirm `apiBase` is your backend origin.
 
 ## 3. Connect GitHub Pages
 
@@ -87,6 +97,8 @@ Use the real backend origin. Apply to Production and any supported Preview envir
 3. Run **Actions > Publish Live Train Pages > Run workflow** on `main`.
 
 The workflow runs `node scripts/stage-pages.js`, requires the backend URL and publishes only `dist/pages`. It does not run a backend on Pages. Publishing is manual; normal pushes run checks.
+
+After the workflow succeeds, open `https://anandhjeeva861-cmyk.github.io/live-train-/public/config.js` and confirm it has the same `apiBase` as Vercel. If it is still empty, check the repository **Actions variable**, selected workflow branch and Pages publishing source; editing a Vercel variable does not update Pages.
 
 The generated `dist/pages/public/config.js` contains only:
 
@@ -145,6 +157,8 @@ node scripts/stage-pages.js
 ```
 
 `test:hosted` uses isolated HTTPS domains, production cookies/CORS, test-only SMTP interception, separate SQLite files and process restarts. It checks both frontend layouts, OTP verification, profile refresh and cookie-blocking fallback. Tests neither send real mail nor change local credentials, and do not prove a remote service is configured.
+
+Verified on 16 September 2026: syntax and secret checks; all 57 unit/API tests; email-setup, hosted HTTPS/restart, fullstack, Pages and Vercel browser suites; both frontend builds with the same test HTTPS origin; and the running localhost backend's health/configuration/session check. The local `.env` remained byte-for-byte unchanged, and its private settings were absent from generated browser assets. The test origin is not a deployed service: rebuild with the real Render URL before publishing. Real hosted inbox delivery remains to be verified after provisioning.
 
 ## Troubleshooting
 

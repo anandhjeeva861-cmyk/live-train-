@@ -13,6 +13,9 @@ test('hosted login requires a public backend and exports no secrets', async () =
   await mkdir('test-results', { recursive: true });
   const output = pathToFileURL(path.resolve(await mkdtemp('test-results/hosting-')) + path.sep);
   await assert.rejects(configureHostedFrontend(output, { RAILGO_REQUIRE_EMAIL_LOGIN: 'true' }), /requires RAILGO_BACKEND_URL/);
+  for (const VERCEL_ENV of ['production', 'preview']) {
+    await assert.rejects(configureHostedFrontend(output, { VERCEL_ENV, RAILGO_REQUIRE_EMAIL_LOGIN: 'false' }), /requires RAILGO_BACKEND_URL/);
+  }
   await configureHostedFrontend(output, { RAILGO_BACKEND_URL: ' https://backend.example.test/ ', RESEND_API_KEY: 'test-only', SMTP_PASS: 'test-only', SMTP_USER: 'private-sender@example.test', EMAIL_FROM: 'private-sender@example.test', SESSION_SECRET: 'test-only', DATABASE_URL: 'file:/private/data.db' });
   const config = await readFile(new URL('config.js', output), 'utf8');
   assert.match(config, /"apiBase":"https:\/\/backend.example.test"/);

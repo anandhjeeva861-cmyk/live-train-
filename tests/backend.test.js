@@ -4,6 +4,7 @@ import { databaseEnvironment, readEmailCode, testProfile } from './helpers.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
+import { verifyBackend } from '../scripts/verify-backend.js';
 
 test('Live Train database and API integration', { timeout: 180000 }, async t => {
   const hostedOrigins = ['https://live-train-five.vercel.app', 'https://anandhjeeva861-cmyk.github.io'];
@@ -57,6 +58,15 @@ test('Live Train database and API integration', { timeout: 180000 }, async t => 
       }
       assert.equal((await guest('/api/auth/session', 'POST', {}, { 'Sec-Fetch-Site': 'cross-site' })).status, 403);
       assert.equal((await guest('/config.js')).body.includes('apiBase: ""'), true, 'Node frontend keeps same-origin local/backend API calls');
+    });
+    await t.test('deployment check exercises both origins without sending OTP or retaining sessions', async () => {
+      const sessions = await prisma.session.count(), challenges = await prisma.emailVerification.count();
+      const checked = await verifyBackend(base, hostedOrigins);
+      assert.deepEqual(checked.origins, hostedOrigins);
+      assert.equal(await prisma.session.count(), sessions);
+      assert.equal(await prisma.emailVerification.count(), challenges);
+      await assert.rejects(verifyBackend(base, ['https://untrusted.example']), /Credentialed CORS/);
+      await assert.rejects(verifyBackend(base + '/profile'), /without credentials, paths/);
     });
     await t.test('email login resumes and removed provider endpoints return 404', async () => {
       const login = async (client, email) => {

@@ -16,7 +16,8 @@ export function backendOrigin(value) {
 
 export async function configureHostedFrontend(directory, env = process.env) {
   const apiBase = backendOrigin(env.RAILGO_BACKEND_URL);
-  if (env.RAILGO_REQUIRE_EMAIL_LOGIN === 'true' && !apiBase) {
+  const hostedDeployment = ['production', 'preview'].includes(env.VERCEL_ENV);
+  if ((hostedDeployment || env.RAILGO_REQUIRE_EMAIL_LOGIN === 'true') && !apiBase) {
     throw new Error('Email login deployment requires RAILGO_BACKEND_URL. Set it to your running backend HTTPS origin.');
   }
   // Always overwrite copied config to prevent an old deployment URL or any
