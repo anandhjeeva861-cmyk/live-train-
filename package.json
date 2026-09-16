@@ -18,6 +18,7 @@
     "data:seed": "node prisma/seed.js",
     "security:secrets": "node scripts/check-secrets.js",
     "test:fullstack": "node --test tests/fullstack.browser.test.js",
+    "test:email-setup": "node --test tests/email-setup.test.js tests/email-setup.browser.test.js tests/email.test.js",
     "build:vercel": "node scripts/build-vercel.js",
     "test:vercel": "node --test tests/vercel.browser.test.js"
   },
