@@ -31,7 +31,8 @@
   }
   async function request(path, options = {}) {
     if (options.signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
-    if (isStatic) {
+    const catalogueRequest = window.LIVE_TRAIN_CONFIG?.catalogueStatic && /^\/api\/(stations|trains|tourism|tourist-spots|weather|assistant)(?:[/?]|$)/.test(path);
+    if (isStatic || catalogueRequest) {
       staticModule ||= import(new URL('./static-api.js', scriptBase).href);
       const { requestStatic } = await staticModule;
       if (options.signal?.aborted) throw new DOMException('Request aborted', 'AbortError');

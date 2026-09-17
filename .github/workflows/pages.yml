@@ -24,7 +24,7 @@ jobs:
           node-version: 24
       - run: node scripts/stage-pages.js
         env:
-          RAILGO_BACKEND_URL: ${{ vars.RAILGO_BACKEND_URL }}
+          RAILGO_BACKEND_URL: ${{ vars.RAILGO_BACKEND_URL || 'https://live-train-five.vercel.app' }}
           RAILGO_REQUIRE_EMAIL_LOGIN: "true"
           RAILGO_FRONTEND_ORIGINS: ${{ vars.RAILGO_FRONTEND_ORIGINS }}
       - uses: actions/configure-pages@v5

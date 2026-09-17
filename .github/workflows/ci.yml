@@ -21,6 +21,7 @@ jobs:
       - run: npm run check
       - run: npm run security:secrets
       - run: npm test
+      - run: npm run test:cloud
       - run: npm run test:email-setup
       - run: npm run test:hosted
       - run: npm run test:fullstack

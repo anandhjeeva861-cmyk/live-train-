@@ -21,13 +21,17 @@
     "test:email-setup": "node --test tests/email-setup.test.js tests/email-setup.browser.test.js tests/email.test.js",
     "build:vercel": "node scripts/build-vercel.js",
     "test:vercel": "node --test tests/vercel.browser.test.js",
-    "test:hosted": "node --test tests/hosted.browser.test.js tests/auth-restart.test.js"
+    "test:hosted": "node --test tests/hosted.browser.test.js tests/auth-restart.test.js",
+    "cloud:generate": "node scripts/cloud-prisma.js generate",
+    "cloud:migrate": "node scripts/cloud-prisma.js migrate",
+    "test:cloud": "npm run cloud:generate && node --test tests/cloud.test.js"
   },
   "engines": {
     "node": ">=22.12"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.0",
+    "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "better-sqlite3": "^12.11.1",
     "cors": "^2.8.6",
@@ -37,9 +41,12 @@
     "express-session": "^1.19.0",
     "helmet": "^8.3.0",
     "nodemailer": "^10.0.10",
+    "pg": "^8.23.0",
     "zod": "^4.6.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
     "playwright": "^1.63.0",
     "prisma": "^7.10.0"
   },

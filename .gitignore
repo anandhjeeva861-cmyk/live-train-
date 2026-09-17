@@ -24,3 +24,6 @@ dist/
 data/sources/
 build/
 .DS_Store
+generated/
+prisma/cloud/schema.prisma
+.vercel/

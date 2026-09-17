@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import helmet from 'helmet';
 import cors from 'cors';
-import { rateLimit } from 'express-rate-limit';
+import { createLimiter } from './backend/rate-limit.js';
 import { z } from 'zod';
 import { prisma } from './backend/db.js';
 import { authMiddleware, registerAuth, requireAuth, production, fail } from './backend/auth.js';
@@ -22,7 +22,7 @@ const port = Number(process.env.PORT) || 4173;
 validateProduction();
 const origins = serverOrigins();
 app.disable('x-powered-by');
-if (process.env.TRUST_PROXY === 'true') app.set('trust proxy', 1);
+if (process.env.TRUST_PROXY === 'true' || process.env.VERCEL === '1') app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: { directives: {
   defaultSrc: ["'self'"], scriptSrc: ["'self'"],
   styleSrc: ["'self'", "'unsafe-inline'"],
@@ -36,7 +36,7 @@ app.use('/api', (req, _res, next) => {
   if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && (source ? !origins.has(source) : req.get('sec-fetch-site') === 'cross-site')) throw fail(403, 'Request origin is not allowed.');
   next();
 });
-app.use('/api', rateLimit({ windowMs: 60_000, limit: 240, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'Too many requests. Try again in a minute.' } }));
+app.use('/api', createLimiter('api', { windowMs: 60_000, limit: 240, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'Too many requests. Try again in a minute.' } }));
 app.use(authMiddleware());
 app.get('/api/health', async (_req, res) => {
   try { await prisma.$queryRaw`SELECT 1`; res.json({ status: 'ok', database: 'connected', ok: true }); }

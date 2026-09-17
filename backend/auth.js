@@ -1,6 +1,6 @@
 import session from 'express-session';
 import crypto from 'node:crypto';
-import { rateLimit } from 'express-rate-limit';
+import { createLimiter } from './rate-limit.js';
 import { prisma, writeTransaction } from './db.js';
 import { z } from 'zod';
 import { emailConfigured, sendLoginEmail } from './email.js';
@@ -67,16 +67,16 @@ export function registerAuth(app) {
     const pending = challenge?.delivered && !challenge.consumed && challenge.attempts < 5 && challenge.expiresAt > new Date() && challenge.sessionHash === digest(req.sessionID) && challengeProfile(challenge);
     res.json({ configured: emailConfigured(), pending: pending ? { email: challenge.email, profile: challengeProfile(challenge), expiresAt: challenge.expiresAt, retryAt: new Date(challenge.sentAt.getTime() + 60000) } : null });
   });
-  const limiter = limit => rateLimit({ windowMs: 15 * 60_000, limit, message: { error: 'Too many attempts. Please try again in 15 minutes.' } });
+  const limiter = (name, limit) => createLimiter(name, { windowMs: 15 * 60_000, limit, message: { error: 'Too many attempts. Please try again in 15 minutes.' } });
   // Confirm that this browser can retain the backend's HttpOnly cookie before
   // sending an OTP. Some browsers block cookies across unrelated hosted sites.
-  app.post('/api/auth/session', limiter(30), async (req, res) => {
+  app.post('/api/auth/session', limiter('auth-session', 60), async (req, res) => {
     req.session.browserReady = true;
     await save(req);
     res.json({ ready: true });
   });
   app.get('/api/auth/session', (req, res) => res.json({ ready: req.session.browserReady === true || req.session.emailAuthenticated === true }));
-  app.post('/api/auth/email/send', limiter(10), async (req, res) => {
+  app.post('/api/auth/email/send', limiter('auth-send', 10), async (req, res) => {
     const email = emailSchema.parse(req.body?.email);
     const profile = profileSchema.parse(req.body?.profile);
     if (!emailConfigured()) throw fail(503, 'Email login is not configured. Please contact the site owner.');
@@ -107,13 +107,14 @@ export function registerAuth(app) {
     }
     res.json({ cancelled: true });
   });
-  app.post('/api/auth/email/verify', limiter(30), async (req, res) => {
+  app.post('/api/auth/email/verify', limiter('auth-verify', 30), async (req, res) => {
     const email = emailSchema.parse(req.body?.email);
     const code = z.string().regex(/^\d{6}$/, 'Enter the six-digit code.').parse(req.body?.code);
     const result = await writeTransaction(async tx => {
       const row = req.session.emailChallenge ? await tx.emailVerification.findUnique({ where: { id: req.session.emailChallenge } }) : null;
       if (!row || row.email !== email || row.sessionHash !== digest(req.sessionID) || row.consumed || !row.delivered || row.expiresAt <= new Date() || row.attempts >= 5 || !challengeProfile(row)) return null;
-      await tx.emailVerification.update({ where: { id: row.id }, data: { attempts: { increment: 1 } } });
+      const claimed = await tx.emailVerification.updateMany({ where: { id: row.id, consumed: false, delivered: true, attempts: { lt: 5 }, expiresAt: { gt: new Date() } }, data: { attempts: { increment: 1 } } });
+      if (!claimed.count) return null;
       if (!crypto.timingSafeEqual(Buffer.from(row.codeHash, 'hex'), Buffer.from(codeDigest(row.id, code), 'hex'))) return null;
       await tx.emailVerification.update({ where: { id: row.id }, data: { consumed: true, ...clearedProfile } });
       const verifiedProfile = { name: row.firstName, dateOfBirth: row.dateOfBirth, contactMobile: row.contactMobile, emailVerified: true };

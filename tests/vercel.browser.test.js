@@ -5,13 +5,16 @@ import { chromium } from 'playwright';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import '../scripts/build-vercel.js';
+import handler from '../api/index.js';
 
 test('Vercel routes load public data and keep unconfigured login unavailable', { timeout: 90000 }, async () => {
   const config = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
   const output = fileURLToPath(new URL(`../${config.outputDirectory}/`, import.meta.url));
   const app = express();
+  app.use('/api', (req, res) => { req.url = req.originalUrl; return handler(req, res); });
   app.use(express.static(output));
-  for (const route of config.rewrites) app.get(route.source, (_req, res) => res.sendFile(output + route.destination));
+  const htmlRoutes = config.rewrites.filter(route => route.destination === '/index.html');
+  for (const route of htmlRoutes) app.get(route.source, (_req, res) => res.sendFile(output + route.destination));
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   let browser;
@@ -22,12 +25,12 @@ test('Vercel routes load public data and keep unconfigured login unavailable', {
     const origin = `http://127.0.0.1:${server.address().port}`;
     const errors = [], failedAssets = [], apiCalls = [];
     page.on('pageerror', error => errors.push(error.message));
-    page.on('response', response => { if (response.url().startsWith(origin) && response.status() >= 400) failedAssets.push(response.url()); });
+    page.on('response', response => { if (response.url().startsWith(origin) && !response.url().startsWith(origin + '/api/') && response.status() >= 400) failedAssets.push(response.url()); });
     page.on('request', request => { if (request.url().startsWith(origin + '/api/')) apiCalls.push(request.url()); });
-    for (const route of ['/', ...config.rewrites.map(route => route.source)]) {
+    for (const route of ['/', ...htmlRoutes.map(route => route.source)]) {
       await page.goto(origin + route, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => document.querySelectorAll('.train-card').length > 0);
-      assert.equal(await page.evaluate(() => LiveTrainAPI.isStatic), true);
+      assert.equal(await page.evaluate(() => LiveTrainAPI.isStatic), false);
       assert.equal(await page.locator('#authPhone, #otpForm, #googleLogin').count(), 0);
       if (route === '/login' || route === '/profile') {
         assert.equal(await page.locator('#authFirstName').isVisible(), true);
@@ -40,7 +43,8 @@ test('Vercel routes load public data and keep unconfigured login unavailable', {
     }
     assert.equal(await page.locator('[data-book]').count(), 0);
     assert.ok(await page.locator('a[href="https://www.irctc.co.in/nget/train-search"]').count() > 0);
-    assert.deepEqual(apiCalls, []);
+    assert.ok(apiCalls.some(url => url.endsWith('/api/auth/config')));
+    assert.ok(apiCalls.every(url => !url.includes('/api/trains') && !url.includes('/api/stations')), 'Catalogue stays on the CDN to conserve free database usage');
     assert.deepEqual(failedAssets, []);
     assert.deepEqual(errors, []);
   } finally {
